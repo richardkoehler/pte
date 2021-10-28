@@ -1,0 +1,17 @@
+name: ieeg_dev
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - bayesian-optimization
+  - catboost
+  - imbalanced-learn
+  - joblib
+  - matplotlib
+  - mne
+  - mne-bids
+  - numba
+  - numpy
+  - pandas
+  - scipy
+  - xgboost
