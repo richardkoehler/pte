@@ -1,4 +1,4 @@
-name: ieeg_dev
+name: pynm-decode
 channels:
   - conda-forge
   - defaults
@@ -13,5 +13,7 @@ dependencies:
   - numba
   - numpy
   - pandas
+  - plotly
+  - scikit-learn
   - scipy
   - xgboost

@@ -1,3 +1,6 @@
+"""Module for processing of EMG channels."""
+
+from typing import Union
 from numba import jit
 import numpy as np
 
@@ -5,11 +8,17 @@ import mne
 
 
 def get_emg_rms(
-        raw, emg_ch, window_len, analog_ch, scaling=1e0, rereference=False,
-        notch_filter=50):
-    """Return root mean square with given window length of raw object. 
+    raw,
+    emg_ch,
+    window_len,
+    analog_ch,
+    scaling=1e0,
+    rereference=False,
+    notch_filter=50,
+):
+    """Return root mean square with given window length of raw object.
     
-     Parameters
+    Parameters
     ----------
     raw : MNE raw object
         The data to be processed.
@@ -29,14 +38,20 @@ def get_emg_rms(
         Raw object containing root mean square of windowed signal and target
         channel.
     """
-    
+
     raw_emg = raw.copy().pick(picks=emg_ch).load_data()
     raw_emg.set_channel_types(
-        mapping={name: 'eeg' for name in raw_emg.ch_names})
+        mapping={name: "eeg" for name in raw_emg.ch_names}
+    )
     if rereference:
         raw_emg = mne.set_bipolar_reference(
-            raw_emg, anode=raw_emg.ch_names[0], cathode=raw_emg.ch_names[1],
-            ch_name=['EMG_BIP'], drop_refs=True, copy=False)
+            raw_emg,
+            anode=raw_emg.ch_names[0],
+            cathode=raw_emg.ch_names[1],
+            ch_name=["EMG_BIP"],
+            drop_refs=True,
+            copy=False,
+        )
     data_bip = raw_emg.get_data()[0]
     if notch_filter:
         assert isinstance(notch_filter, (int, float))
@@ -48,33 +63,36 @@ def get_emg_rms(
     data = raw_filt.get_data()[0]
     data_arr = np.empty((len(window_len), len(data)))
     for idx, window in enumerate(window_len):
-        data_rms = rms_window_nb(data, window, raw.info['sfreq'])
-        data_rms_zx = (data_rms-np.mean(data_rms))/np.std(data_rms)
+        data_rms = _rms_window_nb(data, window, raw.info["sfreq"])
+        data_rms_zx = (data_rms - np.mean(data_rms)) / np.std(data_rms)
         data_arr[idx, :] = data_rms_zx * scaling
     data_analog = raw.copy().pick(picks=analog_ch).get_data()[0]
     if np.abs(min(data_analog)) > max(data_analog):
-        data_analog = data_analog*-1
+        data_analog = data_analog * -1
     data_all = np.vstack((data_analog, data_bip, data_arr))
-    emg_ch_names = ['EMG_RMS_' + str(window) for window in window_len]
+    emg_ch_names = ["EMG_RMS_" + str(window) for window in window_len]
     info_rms = mne.create_info(
-        ch_names=[analog_ch] + ['EMG_BIP'] + emg_ch_names, ch_types='emg',
-        sfreq=raw.info['sfreq'])
+        ch_names=[analog_ch] + ["EMG_BIP"] + emg_ch_names,
+        ch_types="emg",
+        sfreq=raw.info["sfreq"],
+    )
     raw_rms = mne.io.RawArray(data_all, info_rms)
-    raw_rms.info['meas_date'] = raw.info['meas_date']
-    raw_rms.info['line_freq'] = raw.info['line_freq']
+    raw_rms.info["meas_date"] = raw.info["meas_date"]
+    raw_rms.info["line_freq"] = raw.info["line_freq"]
     raw_rms.set_annotations(raw.annotations)
-    raw_rms.set_channel_types({analog_ch: 'misc'})
-    raw_rms._orig_units = {ch: 'µV' for ch in raw_rms.ch_names}
+    raw_rms.set_channel_types({analog_ch: "misc"})
     return raw_rms
-    
+
 
 @jit(nopython=True)
-def rms_window_nb(data, window_len, sfreq):
+def _rms_window_nb(
+    data: np.ndarray, window_len: Union[float, int], sfreq: Union[float, int]
+):
     """Return root mean square of input signal with given window length.
     
-     Parameters
+    Parameters
     ----------
-    data : array
+    data : numpy.ndarray
         The data to be processed. Must be 1-dimensional.
     window_len : float | int
         Window length in milliseconds.
@@ -86,21 +104,36 @@ def rms_window_nb(data, window_len, sfreq):
     data_rms
         Root mean square of windowed signal. Same dimension as input signal
     """
-    
+
     half_window_size = int(sfreq * window_len / 1000 / 2)
     data_rms = np.empty_like(data)
-    for i in range(len(data)):
-        if i == 0 or i == len(data)-1:
-            data_rms[i] = np.absolute(data[i])
+    for i, dat_ in enumerate(data):
+        if i == 0 or i == len(data) - 1:
+            data_rms[i] = np.absolute(dat_)
         elif i < half_window_size:
             new_window_size = i
-            data_rms[i] = np.sqrt(np.mean(np.power(
-                data[i-new_window_size:i+new_window_size], 2)))
-        elif len(data)-i < half_window_size:
-            new_window_size = len(data)-i
-            data_rms[i] = np.sqrt(np.mean(np.power(
-                data[i-new_window_size:i+new_window_size], 2)))
+            data_rms[i] = np.sqrt(
+                np.mean(
+                    np.power(
+                        data[i - new_window_size : i + new_window_size], 2
+                    )
+                )
+            )
+        elif len(data) - i < half_window_size:
+            new_window_size = len(data) - i
+            data_rms[i] = np.sqrt(
+                np.mean(
+                    np.power(
+                        data[i - new_window_size : i + new_window_size], 2
+                    )
+                )
+            )
         else:
-            data_rms[i] = np.sqrt(np.mean(np.power(
-                data[i-half_window_size:i+half_window_size], 2)))
+            data_rms[i] = np.sqrt(
+                np.mean(
+                    np.power(
+                        data[i - half_window_size : i + half_window_size], 2
+                    )
+                )
+            )
     return data_rms

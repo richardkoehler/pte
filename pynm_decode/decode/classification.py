@@ -12,7 +12,6 @@ from bayes_opt import BayesianOptimization
 from catboost import CatBoostClassifier
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
-import mne_bids
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LogisticRegression
@@ -238,9 +237,7 @@ def classify_lda(X_train, y_train, balance):
             "Discriminant Analysis. Please set `balance` to"
             "either `None`, `oversample` or `undersample`."
         )
-    X_train, y_train, sample_weight = balance_samples(
-        X_train, y_train, balance
-    )
+    X_train, y_train, _ = balance_samples(X_train, y_train, balance)
     model = LinearDiscriminantAnalysis(solver="lsqr", shrinkage="auto")
     model.fit(X_train, y_train)
     return model
@@ -341,7 +338,6 @@ def classify_lin_svm(X_train, y_train, group_train, optimize, balance):
             C=params["C"],
             max_iter=500,
             tol=params["tol"],
-            shrinking=True,
             class_weight=None,
             verbose=False,
         )
@@ -724,9 +720,10 @@ def classify_xgb(X_train, y_train, group_train, optimize, balance):
     for train_ind, val_ind in val_split.split(X_train, y_train, group_train):
         X_val = np.ascontiguousarray(X_train[val_ind])
         X_train = np.ascontiguousarray(X_train[train_ind])
-        y_train, y_val = np.ascontiguousarray(
-            y_train[train_ind]
-        ), np.ascontiguousarray(y_train[val_ind])
+        y_train, y_val = (
+            np.ascontiguousarray(y_train[train_ind]),
+            np.ascontiguousarray(y_train[val_ind]),
+        )
         eval_set = [(X_val, y_val)]
         X_train, y_train, sample_weight = balance_samples(
             X_train, y_train, balance
@@ -742,7 +739,7 @@ def classify_xgb(X_train, y_train, group_train, optimize, balance):
     return model
 
 
-def generate_outpath(
+def _generate_outpath(
     root,
     feature_file,
     classifier,
@@ -774,84 +771,7 @@ def generate_outpath(
     return os.path.join(root, feature_file, out_name)
 
 
-def get_all_files(
-    path,
-    suffix,
-    get_bids=False,
-    prefix=None,
-    bids_root=None,
-    verbose=False,
-    extension=None,
-):
-    """Return all files in all (sub-)directories of path with given suffixes and prefixes (case-insensitive).
-
-    Args:
-        path (string)
-        suffix (iterable): e.g. ["vhdr", "edf"] or ".json"
-        get_bids (boolean): True if BIDS_Path type should be returned instead of string. Default: False
-        bids_root (string/path): Path of BIDS root folder. Only required if get_bids=True.
-        prefix (iterable): e.g. ["SelfpacedRota", "ButtonPress] (optional)
-
-    Returns:
-        filepaths (list of strings or list of BIDS_Path)
-    """
-
-    if isinstance(suffix, str):
-        suffix = [suffix]
-    if isinstance(prefix, str):
-        prefix = [prefix]
-
-    filepaths = []
-    for root, dirs, files in os.walk(path):
-        for file in files:
-            for suff in suffix:
-                if file.endswith(suff.lower()):
-                    if not prefix:
-                        filepaths.append(os.path.join(root, file))
-                    else:
-                        for pref in prefix:
-                            if pref.lower() in file.lower():
-                                filepaths.append(os.path.join(root, file))
-
-    bids_paths = filepaths
-    if get_bids:
-        if not bids_root:
-            print(
-                "Warning: No root folder given. Please pass bids_root parameter to create a complete BIDS_Path object."
-            )
-        bids_paths = []
-        for filepath in filepaths:
-            entities = mne_bids.get_entities_from_fname(filepath)
-            try:
-                bids_path = mne_bids.BIDSPath(
-                    subject=entities["subject"],
-                    session=entities["session"],
-                    task=entities["task"],
-                    run=entities["run"],
-                    acquisition=entities["acquisition"],
-                    suffix=entities["suffix"],
-                    extension=extension,
-                    root=bids_root,
-                )
-            except ValueError as err:
-                print(
-                    f"ValueError while creating BIDS_Path object for file {filepath}: {err}"
-                )
-            else:
-                bids_paths.append(bids_path)
-
-    if verbose:
-        if not bids_paths:
-            print("No corresponding files found.")
-        else:
-            print("Corresponding files found:")
-            for idx, file in enumerate(bids_paths):
-                print(idx, ":", os.path.basename(file))
-
-    return bids_paths
-
-
-def discard_trial(baseline, data_artifacts):
+def _discard_trial(baseline, data_artifacts):
     """"""
     if any((baseline <= 0.0, np.count_nonzero(data_artifacts))):
         discard = True
@@ -952,7 +872,7 @@ def get_feat_array(
             rest_end_ind,
             artifacts,
         )
-        if not discard_trial(baseline_period, data_art):
+        if not _discard_trial(baseline_period, data_art):
             X.extend((data_rest, data_target))
             y.extend((np.zeros(len(data_rest)), np.ones(len(data_target))))
             events_used.append(ind)
@@ -989,122 +909,6 @@ def get_feat_array_prediction(data, events, events_used, sfreq, begin, end):
         return np.stack(epochs, axis=0)
     else:
         return epochs
-
-
-@njit
-def clusterwise_pval_numba(p_arr, p_sig, n_perm):
-    """Calculate significant clusters and their corresponding p-values.
-
-    Based on:
-    https://github.com/neuromodulation/wjn_toolbox/blob/4745557040ad26f3b8498ca5d0c5d5dece2d3ba1/mypcluster.m
-    https://garstats.wordpress.com/2018/09/06/cluster/
-
-    Arguments
-    ---------
-    p_arr :  array-like
-        Array of p-values. WARNING: MUST be one-dimensional
-    p_sig : float
-        Significance level
-    n_perm : int
-        No. of random permutations for building cluster null-distribution
-
-    Returns
-    -------
-    p : list of floats
-        List of p-values for each cluster
-    p_min_index : list of numpy array
-        List of indices of each significant cluster
-    """
-
-    def cluster(iterable):
-        """Cluster 1-D array of boolean values.
-
-        Parameters
-        ----------
-        iterable : array-like of bool
-            Array to be clustered.
-
-        Returns
-        -------
-        cluster_labels : np.array
-            Array of shape (len(iterable), 1), where each value indicates the
-            number of the cluster. Values are 0 if the item does not belong to
-            a cluster
-        cluster_count : int
-            Number of detected cluster. Corresponds to the highest value in
-            cluster_labels
-        """
-        cluster_labels = np.zeros((len(iterable), 1))
-        cluster_count = 0
-        cluster_len = 0
-        for idx, item in enumerate(iterable):
-            if item:
-                cluster_labels[idx] = cluster_count + 1
-                cluster_len += 1
-            elif cluster_len == 0:
-                pass
-            else:
-                cluster_len = 0
-                cluster_count += 1
-        if cluster_len >= 1:
-            cluster_count += 1
-        return cluster_labels, cluster_count
-
-    def calculate_null_distribution(p_arr_, p_sig_, n_perm_):
-        """Calculate null distribution of clusters.
-
-        Parameters
-        ----------
-        p_arr_ :  numpy array
-            Array of p-values
-        p_sig_ : float
-            Significance level (p-value)
-        n_perm_ : int
-            No. of random permutations
-
-        Returns
-        -------
-        r_per_arr : numpy array
-            Null distribution of shape (n_perm_)
-        """
-        # loop through random permutation cycles
-        r_per_arr = np.zeros(n_perm_)
-        for r in range(n_perm_):
-            r_per = np.random.randint(
-                low=0, high=p_arr_.shape[0], size=p_arr_.shape[0]
-            )
-            labels_, n_clusters = cluster(p_arr_[r_per] <= p_sig_)
-
-            cluster_ind = {}
-            if n_clusters == 0:
-                r_per_arr[r] = 0
-            else:
-                p_sum = np.zeros(n_clusters)
-                for ind in range(n_clusters):
-                    cluster_ind[ind] = np.where(labels_ == ind + 1)[0]
-                    p_sum[ind] = np.sum(
-                        np.asarray(1 - p_arr_[r_per])[cluster_ind[ind]]
-                    )
-                r_per_arr[r] = np.max(p_sum)
-        return r_per_arr
-
-    labels, num_clusters = cluster(p_arr <= p_sig)
-
-    null_distr = calculate_null_distribution(p_arr, p_sig, n_perm)
-    # Loop through clusters of p_val series or image
-    clusters = []
-    # Initialize empty list with specific data type for numba to work
-    p_vals = [np.float64(x) for x in range(0)]
-    # Cluster labels start at 1
-    for cluster_i in range(num_clusters):
-        index_cluster = np.where(labels == cluster_i + 1)[0]
-        p_cluster_sum = np.sum(np.asarray(1 - p_arr)[index_cluster])
-        p_val = (n_perm - np.sum(p_cluster_sum >= null_distr) + 1) / n_perm
-        if p_val <= p_sig:
-            clusters.append(index_cluster)
-            p_vals.append(p_val)
-
-    return p_vals, clusters
 
 
 def events_from_label(label_data, verbose=False):
@@ -1204,9 +1008,10 @@ def inner_loop(
             features.iloc[train_ind],
             features.iloc[test_ind],
         )
-        y_train, y_test = np.ascontiguousarray(
-            labels[train_ind]
-        ), np.ascontiguousarray(labels[test_ind])
+        y_train, y_test = (
+            np.ascontiguousarray(labels[train_ind]),
+            np.ascontiguousarray(labels[test_ind]),
+        )
         groups_train = groups[train_ind]
         for ch_name in ch_names:
             cols = [col for col in features_train.columns if ch_name in col]
@@ -1512,262 +1317,6 @@ def run_prediction(
     # Save predictions
     classif_df = pd.DataFrame.from_dict(data=classifications)
     classif_df.to_csv(out_file + "_classif.tsv", sep="\t")
-
-
-@njit
-def permutation_numba_onesample(x, y, n_perm, two_tailed=True):
-    """Perform permutation test with one-sample distribution.
-
-    Parameters
-    ----------
-    x : array_like
-        First distribution
-    y : int or float
-        Baseline against which to check for statistical significane
-    n_perm : int
-        Number of permutations
-    two_tailed : bool, default: True
-        Set to False if you would like to perform a one-sampled permutation
-        test, else True
-    two_tailed : bool, default: True
-        Set to False if you would like to perform a one-tailed permutation
-        test, else True
-
-    Returns
-    -------
-    float
-        Estimated difference of distribution from baseline
-    float
-        P-value of permutation test
-    """
-    if two_tailed is True:
-        zeroed = x - y
-        z = np.abs(np.mean(zeroed))
-        p = np.empty(n_perm)
-        # Run the simulation n_perm times
-        for i in np.arange(n_perm):
-            sign = np.random.choice(
-                a=np.array([-1.0, 1.0]), size=len(x), replace=True
-            )
-            p[i] = np.abs(np.mean(zeroed * sign))
-    else:
-        zeroed = x - y
-        z = np.mean(zeroed)
-        p = np.empty(n_perm)
-        # Run the simulation n_perm times
-        for i in np.arange(n_perm):
-            sign = np.random.choice(
-                a=np.array([-1.0, 1.0]), size=len(x), replace=True
-            )
-            p[i] = np.mean(zeroed * sign)
-        # Return p-value
-    return z, (np.sum(p >= z) + 1) / (n_perm + 1)
-
-
-@njit
-def permutation_numba_twosample(x, y, n_perm, two_tailed=True):
-    """Perform permutation test.
-
-    Parameters
-    ----------
-    x : array_like
-        First distribution
-    y : array_like
-        Second distribution
-    n_perm : int
-        Number of permutations
-    two_tailed : bool, default: True
-        Set to False if you would like to perform a one-sampled permutation
-        test, else True
-    two_tailed : bool, default: True
-        Set to False if you would like to perform a one-tailed permutation
-        test, else True
-
-    Returns
-    -------
-    float
-        Estimated difference of distribution means
-    float
-        P-value of permutation test
-    """
-    if two_tailed is True:
-        z = np.abs(np.mean(x) - np.mean(y))
-        pS = np.concatenate((x, y), axis=0)
-        half = int(len(pS) / 2)
-        p = np.empty(n_perm)
-        # Run the simulation n_perm times
-        for i in np.arange(0, n_perm):
-            # Shuffle the data
-            np.random.shuffle(pS)
-            # Compute permuted absolute difference of the two sampled
-            # distributions
-            p[i] = np.abs(np.mean(pS[:half]) - np.mean(pS[half:]))
-    else:
-        z = np.mean(x) - np.mean(y)
-        pS = np.concatenate((x, y), axis=0)
-        half = int(len(pS) / 2)
-        p = np.empty(n_perm)
-        # Run the simulation n_perm times
-        for i in np.arange(0, n_perm):
-            # Shuffle the data
-            np.random.shuffle(pS)
-            # Compute permuted absolute difference of the two sampled
-            # distributions
-            p[i] = np.mean(pS[:half]) - np.mean(pS[half:])
-    return z, (np.sum(p >= z) + 1) / (n_perm + 1)
-
-
-def permutation(x, y, n_perm, two_tailed=True):
-    """Perform permutation test.
-
-    Parameters
-    ----------
-    x : array_like
-        First distribution
-    y : array_like or int or float
-        Second distribution in the case of two-sampled test or baseline in the
-        case of one-sampled test
-    n_perm : int
-        Number of permutations
-    two_tailed : bool, default: True
-        Set to False if you would like to perform a one-tailed permutation
-        test, else True
-
-    Returns
-    -------
-    float
-        Estimated difference of distribution means or difference of single
-        distribution mean from baseline
-    float
-        P-value of permutation test
-    """
-    if isinstance(y, (int, float)):
-        # Perform one-sample permutation test
-        if two_tailed:
-            # Perform two-tailed permutation test
-            zeroed = x - y
-            z = np.abs(np.mean(zeroed))
-            p = np.empty(n_perm)
-            # Run the simulation n_perm times
-            for i in np.arange(n_perm):
-                sign = np.random.choice(
-                    a=np.array([-1.0, 1.0]), size=len(x), replace=True
-                )
-                p[i] = np.abs(np.mean(zeroed * sign))
-        else:
-            # Perform one-tailed permutation test
-            zeroed = x - y
-            z = np.mean(zeroed)
-            p = np.empty(n_perm)
-            # Run the simulation n_perm times
-            for i in np.arange(n_perm):
-                sign = np.random.choice(
-                    a=np.array([-1.0, 1.0]), size=len(x), replace=True
-                )
-                p[i] = np.mean(zeroed * sign)
-    else:
-        # Perform two-sample permutation test
-        if two_tailed:
-            # Perform two-tailed permutation test
-            z = np.abs(np.mean(x) - np.mean(y))
-            pS = np.concatenate((x, y), axis=0)
-            half = int(len(pS) / 2)
-            p = np.empty(n_perm)
-            # Run the simulation n_perm times
-            for i in np.arange(0, n_perm):
-                # Shuffle the data
-                np.random.shuffle(pS)
-                # Compute permuted absolute difference of the two sampled
-                # distributions
-                p[i] = np.abs(np.mean(pS[:half]) - np.mean(pS[half:]))
-        else:
-            # Perform one-tailed permutation test
-            z = np.mean(x) - np.mean(y)
-            pS = np.concatenate((x, y), axis=0)
-            half = int(len(pS) / 2)
-            p = np.empty(n_perm)
-            # Run the simulation n_perm times
-            for i in np.arange(0, n_perm):
-                # Shuffle the data
-                np.random.shuffle(pS)
-                # Compute permuted absolute difference of the two sampled
-                # distributions
-                p[i] = np.mean(pS[:half]) - np.mean(pS[half:])
-        # Return p-value
-    return z, (np.sum(p >= z) + 1) / (n_perm + 1)
-
-
-@njit
-def permutation_onesample_onetailed(x, y, n_perm):
-    """"""
-    # Perform one-tailed permutation test
-    zeroed = x - y
-    z = np.mean(zeroed)
-    p = np.empty(n_perm)
-    # Run the simulation n_perm times
-    for i in np.arange(n_perm):
-        sign = np.random.choice(
-            a=np.array([-1.0, 1.0]), size=len(x), replace=True
-        )
-        p[i] = np.mean(zeroed * sign)
-    return (np.sum(p >= z) + 1) / (n_perm + 1)
-
-
-@njit
-def permutation_onesample_twotailed(x, baseline, n_perm):
-    """"""
-    ## Initialize and pre-allocate
-    zeroed = x - baseline
-    sample_mean = np.abs(np.mean(zeroed))
-    ## Run the simulation n_perm times
-    z = np.empty(n_perm)
-    for i in np.arange(n_perm):
-        #  1. take n random draws from {-1, 1}, where len(x) is the length of
-        #     the data to be tested
-        mn = np.random.choice(
-            a=np.array([-1.0, 1.0]), size=len(x), replace=True
-        )
-        #  2. assign the signs to the data and put them in a temporary variable
-        flipped = zeroed * mn
-        #  3. save the new data in an array
-        z[i] = np.abs(np.mean(flipped))
-    return (np.sum(z >= sample_mean) + 1) / (n_perm + 1)
-
-
-@njit
-def permutation_twosample_twotailed(x, y, n_perm):
-    """Perform two-tailed permutation test of two distributions.
-
-    Parameters
-    ----------
-    x : np array
-        First distribution
-    y : np array
-        Second distribution
-    n_perm : int
-        Number of permutations
-
-    Returns
-    -------
-    float
-        estimated ground truth, here abs difference of distribution means
-    float
-        p-value of permutation test
-    """
-    # Compute ground truth difference
-    sample_diff = np.abs(np.mean(x) - np.mean(y))
-    half = len(x)
-    # Initialize permutation
-    pS = np.concatenate((x, y), axis=0)
-    z = np.empty(n_perm)
-    # Permutation loop
-    for i in np.arange(0, n_perm):
-        # Shuffle the data
-        np.random.shuffle(pS)
-        # Compute permuted absolute difference of the two sampled distributions
-        z[i] = np.abs(np.mean(pS[:half]) - np.mean(pS[half:]))
-    # Return p-value
-    return (len(np.where(z >= sample_diff)[0]) + 1) / (n_perm + 1)
 
 
 def plot_features(
