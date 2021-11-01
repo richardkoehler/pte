@@ -1,19 +1,24 @@
 """Module for running a decoding experiment."""
 
 from dataclasses import dataclass, field
-from typing import Union
+import os
+from typing import Optional, Union
+from matplotlib import pyplot as plt
 
 import numpy as np
 import pandas as pd
 import sklearn
 from sklearn.inspection import permutation_importance
-from sklearn.model_selection import GroupKFold
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit
+from sklearn.metrics import balanced_accuracy_score, log_loss
 
-from .classification import *
+from .decode import get_decoder
 
 
 @dataclass
 class Runner:
+    """Class for running prediction experiments."""
+
     features: pd.DataFrame
     target: pd.DataFrame
     events: np.ndarray
@@ -22,14 +27,14 @@ class Runner:
     out_file: str
     sfreq: int = 10
     classifier: str = "lda"
+    balancing: str = "oversample"
+    optimize: bool = False
     target_begin: Union[str, float, int] = "MovementOnset"
     target_end: Union[str, float, int] = "MovementEnd"
     dist_onset: Union[float, int] = 2.0
     dist_end: Union[float, int] = 2.0
-    exception_files: list = []
+    exception_files: Optional[list] = None
     excep_dist_end: Union[float, int] = 0.0
-    optimize: bool = False
-    balance: str = "oversample"
     use_channels: str = "single"
     pred_begin: Union[float, int] = -3.0
     pred_end: Union[float, int] = 3.0
@@ -46,13 +51,13 @@ class Runner:
     feature_epochs: pd.DataFrame = field(init=False)
     classifications: pd.DataFrame = field(init=False)
     ch_picks: list = field(init=False)
-    data_epochs = field(init=False)
-    labels = field(init=False)
-    events_used = field(init=False)
-    groups = field(init=False)
-    events_discard = field(init=False)
+    data_epochs: np.ndarray = field(init=False)
+    labels: np.ndarray = field(init=False)
+    events_used: np.ndarray = field(init=False)
+    groups: np.ndarray = field(init=False)
+    events_discard: np.ndarray = field(init=False)
     fold: int = field(init=False)
-    evs_test = field(init=False)
+    evs_test: np.ndarray = field(init=False)
     results: list = field(init=False)
 
     def __post_init__(self):
@@ -68,7 +73,8 @@ class Runner:
         # Check for plausability of events
         if not (len(self.events) / 2).is_integer():
             raise ValueError(
-                f"Number of events is odd. Found {len(self.events) / 2} events. Please check your data."
+                f"Number of events is odd. Found {len(self.events) / 2} events."
+                f"Please check your data."
             )
 
         # Construct epoched array of features and labels using events
@@ -81,7 +87,7 @@ class Runner:
         ) = self._get_feat_array(
             self.features.values,
             self.events,
-            sfreq=10,
+            sfreq=self.sfreq,
             target_begin=self.target_begin,
             target_end=self.target_end,
             dist_onset=self.dist_onset,
@@ -142,7 +148,7 @@ class Runner:
         )
         self.y_train = np.ascontiguousarray(self.labels[train_ind])
         self.y_test = np.ascontiguousarray(self.labels[test_ind])
-        groups_train = self.groups[train_ind]
+        self.groups_train = self.groups[train_ind]
 
         # Get prediction epochs
         self.evs_test = np.unique(self.groups[test_ind]) * 2
@@ -167,18 +173,12 @@ class Runner:
 
             X_train = np.ascontiguousarray(self.features_train[cols].values)
             X_test = np.ascontiguousarray(self.features_test[cols].values)
-            model = train_model(
-                self.classifier,
-                X_train,
-                X_test,
-                self.y_train,
-                self.y_test,
-                groups_train,
-                self.optimize,
-                self.balance,
+            decoder = get_decoder(
+                self.classifier, self.balancing, self.optimize
             )
+            decoder.fit(X_train, self.y_train, self.groups_train)
             imp = permutation_importance(
-                model,
+                decoder.model,
                 X_test,
                 self.y_test,
                 scoring="balanced_accuracy",
@@ -187,9 +187,9 @@ class Runner:
             )
             imp_scores = imp.importances_mean
             # imp_scores = model.coef_
-            y_pred = model.predict(X_test)
+            y_pred = decoder.model.predict(X_test)
             accuracy = balanced_accuracy_score(self.y_test, y_pred)
-            y_prob = model.predict_proba(X_test)
+            y_prob = decoder.model.predict_proba(X_test)
             logloss = log_loss(self.y_test, y_prob)
             self.results.append(
                 [
@@ -217,8 +217,8 @@ class Runner:
                 pass
             else:
                 # Make predictions
-                predictions = predict_epochs(
-                    model, features_pred, self.pred_mode
+                predictions = self._predict_epochs(
+                    decoder.model, features_pred, self.pred_mode
                 )
                 # Add prediction results to dictionary
                 if self.use_channels in ["single", "single_contralat"]:
@@ -237,7 +237,7 @@ class Runner:
                 + " - "
                 + str(self.target_end)
             )
-            plot_predictions(
+            self._plot_channel_predictions(
                 self.classifications[ch_name],
                 label=self.classifications["Movement"],
                 label_name="Movement",
@@ -313,10 +313,7 @@ class Runner:
                     self.features_train,
                     self.y_train,
                     self.groups_train,
-                    self.classifier,
-                    self.optimize,
-                    self.balance,
-                    self.cv_outer,
+                    self.cv_inner,
                 )
             ),
             "all": ["ECOG", "LFP"],
@@ -481,16 +478,13 @@ class Runner:
                 ]
         return data_rest, data_target, data_art
 
-    @staticmethod
     def _inner_loop(
+        self,
         ch_names,
         features,
         labels,
         groups,
-        classifier,
-        optimize,
-        balance,
-        cv=GroupShuffleSplit(n_splits=10, test_size=0.1),
+        cv=GroupShuffleSplit(n_splits=5, test_size=0.2),
     ):
         """"""
         results = []
@@ -510,17 +504,11 @@ class Runner:
                 ]
                 X_train = np.ascontiguousarray(features_train[cols].values)
                 X_test = np.ascontiguousarray(features_test[cols].values)
-                model = train_model(
-                    classifier,
-                    X_train,
-                    X_test,
-                    y_train,
-                    y_test,
-                    groups_train,
-                    optimize,
-                    balance,
+                decoder = get_decoder(
+                    self.classifier, self.balancing, self.optimize
                 )
-                y_pred = model.predict(X_test)
+                decoder.fit(X_train, y_train, groups_train)
+                y_pred = decoder.model.predict(X_test)
                 accuracy = balanced_accuracy_score(y_test, y_pred)
                 results.append([accuracy, ch_name])
         results_df = pd.DataFrame(
@@ -536,3 +524,58 @@ class Runner:
         best_ecog = df_ecog["channel"].loc[df_ecog["accuracy"].idxmax()]
         best_lfp = df_lfp["channel"].loc[df_lfp["accuracy"].idxmax()]
         return [best_ecog, best_lfp]
+
+    @staticmethod
+    def _predict_epochs(model, features: np.ndarray, mode: str):
+        """"""
+        predictions = []
+        if features.ndim < 3:
+            np.expand_dims(features, axis=0)
+        for trial in features:
+            if mode == "classification":
+                predictions.append(model.predict(trial))
+            elif mode == "probability":
+                predictions.append(model.predict_proba(trial)[:, 1])
+            elif mode == "decision_function":
+                predictions.append(model.decision_function(trial))
+            else:
+                raise ValueError(
+                    f"Only `classification`, `probability` or `decision_function` "
+                    f"are valid options for `mode`. Got {mode}."
+                )
+        return predictions
+
+    @staticmethod
+    def _plot_channel_predictions(
+        predictions,
+        label,
+        label_name,
+        title,
+        sfreq,
+        axis_time,
+        savefig=False,
+        show_plot=False,
+        filename=None,
+    ):
+        """"""
+        predictions = np.stack(predictions, axis=0)
+        label = np.stack(label, axis=0)
+        fig, axs = plt.subplots(figsize=(5, 3))
+        axs.plot(predictions.mean(axis=0), label="Predictions")
+        axs.plot(label.mean(axis=0), color="m", label=label_name)
+        axs.legend(loc="upper right")
+        axs.set_xticks(np.arange(0, predictions.shape[1] + 1, sfreq))
+        axs.set_xticklabels(np.arange(axis_time[0], axis_time[1] + 1, 1))
+        axs.set_ylim(-0.02, 1.02)
+        axs.set(xlabel="Time [s]", ylabel="Prediction Rate")
+        fig.suptitle(
+            title + "\n" + os.path.basename(filename).split("_ieeg")[0],
+            fontsize="small",
+        )
+        fig.tight_layout()
+        if savefig:
+            fig.savefig(filename + ".png", dpi=300)
+        if show_plot:
+            plt.show()
+        else:
+            plt.close(fig)

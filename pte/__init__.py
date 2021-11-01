@@ -9,6 +9,6 @@ from .filetools import (
 )
 from .plot import raw_plotly, sig_plotly
 
-from .decode import classification
+from .decode import classification, Runner
 from . import filetools
 from . import process

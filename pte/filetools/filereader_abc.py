@@ -3,11 +3,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import os
-from typing import List
+from typing import List, Optional
 
 import mne_bids
 
-from pynm_decode import settings
+from .. import settings
 
 
 @dataclass
@@ -79,10 +79,12 @@ class FileReader(ABC):
         self.directory = directory
 
         files = []
-        for _, _, files in os.walk(directory):
-            files = self._keyword_search(files, keywords)
-            files = self._keyword_search(files, extensions)
-        files = [os.path.join(directory, file) for file in files]
+        for _, _, fnames in os.walk(directory):
+            fnames = self._keyword_search(fnames, keywords)
+            fnames = self._keyword_search(fnames, extensions)
+            files.extend(fnames)
+        if files:
+            files = [os.path.join(directory, file) for file in files]
 
         if verbose:
             self._print_files(files)
@@ -91,11 +93,11 @@ class FileReader(ABC):
     def _filter_files(
         self,
         files: List[str],
-        keywords: list = None,
-        hemisphere: str = None,
-        stimulation: str = None,
-        medication: str = None,
-        exclude: str = None,
+        keywords: Optional[list] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[str] = None,
         verbose: bool = True,
     ) -> List[str]:
         """Filter list of filepaths for given parameters and return filtered list."""
