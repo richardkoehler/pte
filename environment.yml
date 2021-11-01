@@ -1,4 +1,4 @@
-name: pynm-decode
+name: pte
 channels:
   - conda-forge
   - defaults
