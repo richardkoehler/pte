@@ -42,7 +42,13 @@ class DefaultReader(FileReader):
     ) -> None:
         """Filter list of filepaths for given parameters and return filtered list."""
         self.files = self._filter_files(
-            keywords, hemisphere, stimulation, medication, exclude, verbose
+            self.files,
+            keywords=keywords,
+            hemisphere=hemisphere,
+            stimulation=stimulation,
+            medication=medication,
+            exclude=exclude,
+            verbose=verbose,
         )
 
 
