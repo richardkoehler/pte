@@ -1,18 +1,119 @@
 """Module for running a decoding experiment."""
 
-from dataclasses import dataclass, field
 import os
-from typing import Optional, Union
-from matplotlib import pyplot as plt
+import sys
+from dataclasses import dataclass, field
+from typing import Any, Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
 import sklearn
+from matplotlib import pyplot as plt
 from sklearn.inspection import permutation_importance
-from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 from sklearn.metrics import balanced_accuracy_score, log_loss
+from sklearn.model_selection import (
+    GroupKFold,
+    GroupShuffleSplit,
+    LeaveOneGroupOut,
+)
 
+from ..settings import PATH_PYNEUROMODULATION
 from .decode import get_decoder
+
+sys.path.insert(0, PATH_PYNEUROMODULATION)
+
+from pyneuromodulation.nm_reader import NM_Reader
+
+
+def run_prediction(
+    features_root,
+    feature_file,
+    classifier,
+    label_channels,
+    target_beg,
+    target_en,
+    optimize,
+    balance,
+    out_root,
+    use_channels,
+    use_features,
+    plot_target_channels=None,
+    pred_mode="probability",
+    use_times=1,
+    exceptions=None,
+    save_plot=True,
+    show_plot=False,
+    verbose=True,
+) -> None:
+    """Initialize Runner object and save prediction and save results."""
+
+    if verbose:
+        print("Using file: ", feature_file)
+
+    nm_reader = NM_Reader(feature_path=features_root)
+    features = nm_reader.read_features(feature_file)
+    settings = nm_reader.read_settings(feature_file)
+    channels = np.array(settings["ch_names"])[settings["feature_idx"]]
+
+    # Pick label for classification
+    for label_channel in label_channels:
+        if label_channel in features.columns:
+            label = nm_reader.read_label(label_channel)
+            if verbose:
+                print(f"Using label: {label_channel}")
+            break
+
+    # Pick artifact channel
+    artifacts = []
+    # artifacts_ = file_reader.read_label(ARTIFACT_CHANNELS)
+
+    # Calculate events from label
+    events = _events_from_label(label.values, verbose)
+
+    # Pick target for plotting predictions
+    target_df = _get_target_df(plot_target_channels, features)
+
+    features_df = _get_feature_df(features, use_features, use_times)
+
+    # Generate output file name
+    out_path = _generate_outpath(
+        out_root,
+        feature_file,
+        classifier,
+        target_beg,
+        target_en,
+        use_channels,
+        optimize,
+        use_times,
+    )
+
+    runner = Runner(
+        features=features_df,
+        target=target_df,
+        events=events,
+        artifacts=artifacts,
+        ch_names=channels,
+        out_file=out_path,
+        sfreq=settings["sampling_rate_features"],
+        classifier=classifier,
+        balancing=balance,
+        optimize=optimize,
+        target_begin=target_beg,
+        target_end=target_en,
+        dist_onset=2.0,
+        dist_end=1.5,
+        exception_files=exceptions,
+        excep_dist_end=0.5,
+        use_channels=use_channels,
+        pred_begin=-3.0,
+        pred_end=2.0,
+        pred_mode=pred_mode,
+        cv_outer=LeaveOneGroupOut(),
+        show_plot=show_plot,
+        save_plot=save_plot,
+        verbose=verbose,
+    )
+    runner.run()
 
 
 @dataclass
@@ -28,6 +129,7 @@ class Runner:
     sfreq: int = 10
     classifier: str = "lda"
     balancing: str = "oversample"
+    scoring: str = "balanced_accuracy"
     optimize: bool = False
     target_begin: Union[str, float, int] = "MovementOnset"
     target_end: Union[str, float, int] = "MovementEnd"
@@ -59,6 +161,7 @@ class Runner:
     fold: int = field(init=False)
     evs_test: np.ndarray = field(init=False)
     results: list = field(init=False)
+    results_keys: list = field(init=False)
 
     def __post_init__(self):
         # Initialize classification results
@@ -121,8 +224,7 @@ class Runner:
         results_df = pd.DataFrame(
             data=self.results,
             columns=[
-                "accuracy",
-                "neg_logloss",
+                self.scoring,
                 "fold",
                 "channel_name",
                 "feature_importances",
@@ -174,27 +276,26 @@ class Runner:
             X_train = np.ascontiguousarray(self.features_train[cols].values)
             X_test = np.ascontiguousarray(self.features_test[cols].values)
             decoder = get_decoder(
-                self.classifier, self.balancing, self.optimize
+                classifier=self.classifier,
+                scoring=self.scoring,
+                balancing=self.balancing,
+                optimize=self.optimize,
             )
             decoder.fit(X_train, self.y_train, self.groups_train)
             imp = permutation_importance(
                 decoder.model,
                 X_test,
                 self.y_test,
-                scoring="balanced_accuracy",
+                scoring=self.scoring,
                 n_repeats=100,
                 n_jobs=-1,
             )
             imp_scores = imp.importances_mean
             # imp_scores = model.coef_
-            y_pred = decoder.model.predict(X_test)
-            accuracy = balanced_accuracy_score(self.y_test, y_pred)
-            y_prob = decoder.model.predict_proba(X_test)
-            logloss = log_loss(self.y_test, y_prob)
+            score = decoder.get_score(X_test, self.y_test)
             self.results.append(
                 [
-                    accuracy,
-                    logloss,
+                    score,
                     self.fold,
                     ch_pick,
                     imp_scores,
@@ -302,7 +403,7 @@ class Runner:
             return self.excep_dist_end
         return self.dist_end
 
-    def _get_ch_picks(self):
+    def _get_ch_picks(self) -> list:
         """Handle channel picks."""
         picks = {
             "single": self.ch_names,
@@ -336,7 +437,7 @@ class Runner:
         return picks[self.use_channels]
 
     @staticmethod
-    def _discard_trial(baseline, data_artifacts):
+    def _discard_trial(baseline: int, data_artifacts: np.ndarray) -> bool:
         """"""
         if any((baseline <= 0.0, np.count_nonzero(data_artifacts))):
             return True
@@ -353,7 +454,7 @@ class Runner:
         dist_end,
         artifacts=None,
         verbose=False,
-    ):
+    ) -> tuple(np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
         """"""
         dist_onset = int(dist_onset * sfreq)
         dist_end = int(dist_end * sfreq)
@@ -404,7 +505,7 @@ class Runner:
 
     def _get_feat_array_prediction(
         self, data, events, events_used, sfreq, begin, end
-    ):
+    ) -> Union[str, np.ndarray]:
         """"""
         begin = int(begin * sfreq)
         end = int(end * sfreq)
@@ -424,8 +525,13 @@ class Runner:
         return epochs
 
     def _get_baseline_period(
-        self, events, event_ind, dist_onset, dist_end, artifacts
-    ):
+        self,
+        events,
+        event_ind: int,
+        dist_onset: int,
+        dist_end: int,
+        artifacts: Optional[np.ndarray],
+    ) -> int:
         """"""
         ind_onset = events[event_ind] - dist_onset
         if event_ind != 0:
@@ -447,13 +553,13 @@ class Runner:
         self,
         data,
         events,
-        ind,
-        target_begin,
-        target_end,
-        rest_beg_ind,
-        rest_end_ind,
+        ind: int,
+        target_begin: int,
+        target_end: Union[int, str],
+        rest_beg_ind: int,
+        rest_end_ind: int,
         artifacts,
-    ):
+    ) -> tuple(np.ndarray, np.ndarray, np.ndarray):
         """"""
         data_art = None
         if target_end == "MovementEnd":
@@ -480,14 +586,14 @@ class Runner:
 
     def _inner_loop(
         self,
-        ch_names,
-        features,
-        labels,
-        groups,
+        ch_names: list(Any),
+        features: pd.DataFrame,
+        labels: np.ndarray,
+        groups: np.ndarray,
         cv=GroupShuffleSplit(n_splits=5, test_size=0.2),
-    ):
+    ) -> list(str, str):
         """"""
-        results = []
+        results = {ch_name: [] for ch_name in ch_names}
         for train_ind, test_ind in cv.split(features.values, labels, groups):
             features_train, features_test = (
                 features.iloc[train_ind],
@@ -510,23 +616,27 @@ class Runner:
                 decoder.fit(X_train, y_train, groups_train)
                 y_pred = decoder.model.predict(X_test)
                 accuracy = balanced_accuracy_score(y_test, y_pred)
-                results.append([accuracy, ch_name])
-        results_df = pd.DataFrame(
-            data=results, columns=["accuracy", "channel"]
-        )
-        results = []
-        for ch_name in ch_names:
-            df_chan = results_df[results_df["channel"] == ch_name]
-            results.append([np.mean(df_chan["accuracy"].values), ch_name])
-        df_new = pd.DataFrame(data=results, columns=["accuracy", "channel"])
-        df_lfp = df_new[df_new["channel"].str.contains("LFP")]
-        df_ecog = df_new[df_new["channel"].str.contains("ECOG")]
-        best_ecog = df_ecog["channel"].loc[df_ecog["accuracy"].idxmax()]
-        best_lfp = df_lfp["channel"].loc[df_lfp["accuracy"].idxmax()]
+                results[ch_name].append(accuracy)
+        lfp_results = {
+            ch_name: np.mean(scores)
+            for ch_name, scores in results.items()
+            if "LFP" in ch_name
+        }
+        ecog_results = {
+            ch_name: np.mean(scores)
+            for ch_name, scores in results.items()
+            if "ECOG" in ch_name
+        }
+        best_lfp = sorted(
+            lfp_results.items(), key=lambda x: x[1], reverse=True
+        )[0]
+        best_ecog = sorted(
+            ecog_results.items(), key=lambda x: x[1], reverse=True
+        )[0]
         return [best_ecog, best_lfp]
 
     @staticmethod
-    def _predict_epochs(model, features: np.ndarray, mode: str):
+    def _predict_epochs(model, features: np.ndarray, mode: str) -> list(Any):
         """"""
         predictions = []
         if features.ndim < 3:
@@ -549,14 +659,14 @@ class Runner:
     def _plot_channel_predictions(
         predictions,
         label,
-        label_name,
-        title,
-        sfreq,
-        axis_time,
+        label_name: str,
+        title: str,
+        sfreq: Union[int, str],
+        axis_time: Iterable[Union[int, str], Union[int, str]],
         savefig=False,
         show_plot=False,
         filename=None,
-    ):
+    ) -> None:
         """"""
         predictions = np.stack(predictions, axis=0)
         label = np.stack(label, axis=0)
@@ -579,3 +689,124 @@ class Runner:
             plt.show()
         else:
             plt.close(fig)
+
+
+def _generate_outpath(
+    root,
+    feature_file,
+    classifier,
+    target_beg,
+    target_en,
+    use_channels_,
+    optimize,
+    use_times,
+) -> str:
+    """"""
+    clf_str = "_" + classifier + "_"
+
+    target_str = (
+        "movement_"
+        if target_en == "MovementEnd"
+        else "mot_intention_" + str(target_beg) + "_" + str(target_en) + "_"
+    )
+    ch_str = use_channels_ + "_chs_"
+    opt_str = "opt_" if optimize else "no_opt_"
+    out_name = (
+        feature_file
+        + clf_str
+        + target_str
+        + ch_str
+        + opt_str
+        + str(use_times * 100)
+        + "ms"
+    )
+    return os.path.join(root, feature_file, out_name)
+
+
+def _events_from_label(
+    label_data: np.ndarray, verbose: bool = False
+) -> np.ndarray:
+    """
+
+    Parameters
+    ----------
+    label_data
+    verbose
+
+    Returns
+    -------
+
+    """
+    label_diff = np.zeros_like(label_data, dtype=int)
+    label_diff[1:] = np.diff(label_data)
+    events_ = np.nonzero(label_diff)[0]
+    if verbose:
+        print(f"Number of events detected: {len(events_) / 2}")
+    return events_
+
+
+def _get_target_df(
+    targets: Iterable, features_df: pd.DataFrame
+) -> pd.DataFrame:
+    """"""
+    i = 0
+    target_df = pd.DataFrame()
+    while len(target_df.columns) == 0:
+        target_pick = targets[i]
+        col_picks = [
+            col for col in features_df.columns if target_pick in col.lower()
+        ]
+        for col in col_picks[:1]:
+            target_df[col] = features_df[col]
+        i += 1
+    if len(col_picks[:1]) > 1:
+        raise ValueError(f"Multiple targets found: {col_picks}")
+    print("Target channel used: ", target_df.columns)
+    return target_df
+
+
+def _get_feature_df(
+    features: pd.DataFrame, use_features: Iterable, use_times: int
+) -> pd.DataFrame:
+    """
+
+    Parameters
+    ----------
+    features
+    use_features
+    use_times
+
+    Returns
+    -------
+
+    """
+    # Extract features to use from dataframe
+    column_picks = [
+        col
+        for col in features.columns
+        if any([pick in col for pick in use_features])
+    ]
+    used_features = features[column_picks]
+
+    # Initialize list of features to use
+    feat_list = [
+        used_features.rename(
+            columns={col: col + "_100_ms" for col in used_features.columns}
+        )
+    ]
+
+    # Use additional features from previous time points
+    # use_times = 1 means no features from previous time points are
+    # being used
+    for s in np.arange(1, use_times):
+        feat_list.append(
+            used_features.shift(s, axis=0).rename(
+                columns={
+                    col: col + "_" + str((s + 1) * 100) + "_ms"
+                    for col in used_features.columns
+                }
+            )
+        )
+
+    # Return final features dataframe
+    return pd.concat(feat_list, axis=1).fillna(0.0)

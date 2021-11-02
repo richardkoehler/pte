@@ -92,7 +92,6 @@ class FileReader(ABC):
 
     def _filter_files(
         self,
-        files: List[str],
         keywords: Optional[list] = None,
         hemisphere: Optional[str] = None,
         stimulation: Optional[str] = None,
@@ -101,7 +100,13 @@ class FileReader(ABC):
         verbose: bool = True,
     ) -> List[str]:
         """Filter list of filepaths for given parameters and return filtered list."""
-        filtered_files = files
+        filtered_files = self.files
+        if exclude:
+            filtered_files = [
+                file
+                for file in filtered_files
+                if not any(item in file for item in exclude)
+            ]
         if keywords:
             if isinstance(keywords, str):
                 keywords = [keywords]
@@ -136,12 +141,7 @@ class FileReader(ABC):
                 if hemisphere.lower() in "contralateral" and hem not in file:
                     matching_files.append(file)
             filtered_files = matching_files
-        if exclude:
-            filtered_files = [
-                file
-                for file in filtered_files
-                if not any(item in file for item in exclude)
-            ]
+        self.files = filtered_files
         if verbose:
             self._print_files(filtered_files)
         return filtered_files

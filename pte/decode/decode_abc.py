@@ -15,6 +15,7 @@ from sklearn.utils.class_weight import compute_sample_weight
 class Decoder(ABC):
     """Basic representation of class of machine learning decoders."""
 
+    scoring: Any
     balancing: Optional[str] = "oversample"
     optimize: bool = False
     model: Any = field(init=False)
@@ -25,6 +26,10 @@ class Decoder(ABC):
     @abstractmethod
     def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
         """Fit model to given training data and training labels."""
+
+    def get_score(self, data_test: np.ndarray, label_test: np.ndarray):
+        """Calculate score."""
+        return self.scoring(self.model, data_test, label_test)
 
     @staticmethod
     def _get_validation_split(

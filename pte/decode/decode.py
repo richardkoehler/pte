@@ -1,14 +1,14 @@
 """Module for machine learning models."""
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import numpy as np
 from bayes_opt import BayesianOptimization
 from catboost import CatBoostClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
+from sklearn.metrics import balanced_accuracy_score, log_loss
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
@@ -17,7 +17,10 @@ from .decode_abc import Decoder
 
 
 def get_decoder(
-    classifier: str, balancing: Optional[str] = None, optimize: bool = False
+    classifier: str,
+    scoring: str = "balanced_accuracy",
+    balancing: Optional[str] = None,
+    optimize: bool = False,
 ) -> Decoder:
     """Create and return Decoder of desired type.
 
@@ -26,6 +29,9 @@ def get_decoder(
     classifier : str
         Allowed values for `classifier`: ["catboost", "lda", "lin_svm", "lr", "svm_lin",
         "svm_poly", "svm_rbf", "xgb"].
+    scoring : str | None, default="balanced_accuracy"
+        Score to be calculated. Possible values:
+        ["oversample", "undersample", "balance_weights"].
     balancing : str | None, default=None
         Method for balancing skewed datasets. Possible values:
         ["oversample", "undersample", "balance_weights"].
@@ -45,15 +51,56 @@ def get_decoder(
         "xgb": XGB,
     }
     BALANCING_METHODS = ["oversample", "undersample", "balance_weights"]
+    SCORING_METHODS = {
+        "balanced_accuracy": _get_balanced_accuracy,
+        "log_loss": _get_log_loss,
+    }
 
     classifier = classifier.lower()
     balancing = balancing.lower()
+    scoring = scoring.lower()
 
     if classifier not in CLASSIFIERS:
         raise DecoderNotFoundError(classifier, CLASSIFIERS)
+    if scoring not in SCORING_METHODS:
+        raise ScoringMethodNotFoundError(scoring, SCORING_METHODS)
     if all((balancing, balancing not in BALANCING_METHODS)):
         raise BalancingMethodNotFoundError(balancing, BALANCING_METHODS)
-    return CLASSIFIERS[classifier](balancing, optimize)
+    return CLASSIFIERS[classifier](balancing, optimize, scoring)
+
+
+def _get_balanced_accuracy(model, data_test, label_test) -> Any:
+    """Calculated balanced accuracy score."""
+    return balanced_accuracy_score(label_test, model.predict(data_test))
+
+
+def _get_log_loss(model, data_test, label_test) -> Any:
+    """Calculate Log Loss score."""
+    return log_loss(label_test, model.predict_proba(data_test))
+
+
+class ScoringMethodNotFoundError(Exception):
+    """Exception raised when invalid balancing method is passed.
+
+    Attributes:
+        input_value -- input value which caused the error
+        allowed -- allowed input values
+        message -- explanation of the error
+    """
+
+    def __init__(
+        self,
+        input_value,
+        allowed,
+        message="Input scoring method is not an allowed value.",
+    ) -> None:
+        self.input_value = input_value
+        self.allowed = allowed
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return f"{{self.message}} Allowed values: {self.allowed}. Got: {self.input_value}."
 
 
 class BalancingMethodNotFoundError(Exception):

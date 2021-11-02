@@ -41,8 +41,7 @@ class DefaultReader(FileReader):
         verbose: bool = True,
     ) -> None:
         """Filter list of filepaths for given parameters and return filtered list."""
-        self.files = self._filter_files(
-            self.files,
+        self._filter_files(
             keywords=keywords,
             hemisphere=hemisphere,
             stimulation=stimulation,
@@ -87,10 +86,16 @@ class BIDSReader(FileReader):
         exclude: str = None,
         verbose: bool = True,
     ) -> None:
-        files = self._filter_files(
-            keywords, hemisphere, stimulation, medication, exclude, verbose
+        self.files = [file.basename for file in self.files]
+        self._filter_files(
+            keywords=keywords,
+            hemisphere=hemisphere,
+            stimulation=stimulation,
+            medication=medication,
+            exclude=exclude,
+            verbose=verbose,
         )
-        self.files = self._make_bids_paths(files, ".vhdr")
+        self.files = self._make_bids_paths(self.files, ".vhdr")
 
     def _make_bids_paths(
         self, filepaths: List[str], extension: str = ".vhdr",

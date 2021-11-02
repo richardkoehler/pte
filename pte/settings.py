@@ -1,3 +1,5 @@
+PATH_PYNEUROMODULATION = r"C:\Users\richa\GitHub\py_neuromodulation"
+
 ECOG_HEMISPHERES = {
     "002": "L",
     "003": "L",
