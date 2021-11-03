@@ -50,23 +50,33 @@ def get_decoder(
         "svm_rbf": SVC_RBF,
         "xgb": XGB,
     }
-    BALANCING_METHODS = ["oversample", "undersample", "balance_weights"]
+    BALANCING_METHODS = [
+        "oversample",
+        "undersample",
+        "balance_weights",
+        True,
+        False,
+    ]
     SCORING_METHODS = {
         "balanced_accuracy": _get_balanced_accuracy,
         "log_loss": _get_log_loss,
     }
 
     classifier = classifier.lower()
-    balancing = balancing.lower()
+    balancing = balancing.lower() if isinstance(balancing, str) else balancing
     scoring = scoring.lower()
 
     if classifier not in CLASSIFIERS:
-        raise DecoderNotFoundError(classifier, CLASSIFIERS)
+        raise DecoderNotFoundError(classifier, CLASSIFIERS.keys())
     if scoring not in SCORING_METHODS:
-        raise ScoringMethodNotFoundError(scoring, SCORING_METHODS)
+        raise ScoringMethodNotFoundError(scoring, SCORING_METHODS.keys())
     if all((balancing, balancing not in BALANCING_METHODS)):
         raise BalancingMethodNotFoundError(balancing, BALANCING_METHODS)
-    return CLASSIFIERS[classifier](balancing, optimize, scoring)
+    return CLASSIFIERS[classifier](
+        balancing=balancing,
+        optimize=optimize,
+        scoring=SCORING_METHODS[scoring],
+    )
 
 
 def _get_balanced_accuracy(model, data_test, label_test) -> Any:

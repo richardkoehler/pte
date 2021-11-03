@@ -1,5 +1,7 @@
 """Module for running a decoding experiment."""
 
+import csv
+import json
 import os
 import sys
 from dataclasses import dataclass, field
@@ -30,15 +32,16 @@ def run_prediction(
     feature_file,
     classifier,
     label_channels,
-    target_beg,
-    target_en,
+    target_begin,
+    target_end,
     optimize,
-    balance,
+    balancing,
     out_root,
     use_channels,
     use_features,
+    cross_validation,
     plot_target_channels=None,
-    pred_mode="probability",
+    pred_mode="classify",
     use_times=1,
     exceptions=None,
     save_plot=True,
@@ -53,19 +56,16 @@ def run_prediction(
     nm_reader = NM_Reader(feature_path=features_root)
     features = nm_reader.read_features(feature_file)
     settings = nm_reader.read_settings(feature_file)
-    channels = np.array(settings["ch_names"])[settings["feature_idx"]]
 
     # Pick label for classification
     for label_channel in label_channels:
         if label_channel in features.columns:
             label = nm_reader.read_label(label_channel)
-            if verbose:
-                print(f"Using label: {label_channel}")
             break
 
     # Pick artifact channel
     artifacts = []
-    # artifacts_ = file_reader.read_label(ARTIFACT_CHANNELS)
+    # artifacts = file_reader.read_label(ARTIFACT_CHANNELS)
 
     # Calculate events from label
     events = _events_from_label(label.values, verbose)
@@ -80,26 +80,26 @@ def run_prediction(
         out_root,
         feature_file,
         classifier,
-        target_beg,
-        target_en,
+        target_begin,
+        target_end,
         use_channels,
         optimize,
         use_times,
     )
 
+    # Initialize Runner instance
     runner = Runner(
         features=features_df,
         target=target_df,
         events=events,
         artifacts=artifacts,
-        ch_names=channels,
-        out_file=out_path,
+        ch_names=settings["ch_names"],
         sfreq=settings["sampling_rate_features"],
         classifier=classifier,
-        balancing=balance,
+        balancing=balancing,
         optimize=optimize,
-        target_begin=target_beg,
-        target_end=target_en,
+        target_begin=target_begin,
+        target_end=target_end,
         dist_onset=2.0,
         dist_end=1.5,
         exception_files=exceptions,
@@ -108,9 +108,10 @@ def run_prediction(
         pred_begin=-3.0,
         pred_end=2.0,
         pred_mode=pred_mode,
-        cv_outer=LeaveOneGroupOut(),
+        cv_outer=cross_validation,
         show_plot=show_plot,
         save_plot=save_plot,
+        out_file=out_path,
         verbose=verbose,
     )
     runner.run()
@@ -151,26 +152,26 @@ class Runner:
     save_plot: str = False
     verbose: bool = False
     feature_epochs: pd.DataFrame = field(init=False)
-    classifications: pd.DataFrame = field(init=False)
-    ch_picks: list = field(init=False)
     data_epochs: np.ndarray = field(init=False)
-    labels: np.ndarray = field(init=False)
-    events_used: np.ndarray = field(init=False)
-    groups: np.ndarray = field(init=False)
-    events_discard: np.ndarray = field(init=False)
     fold: int = field(init=False)
+    ch_picks: list = field(init=False)
+    labels: np.ndarray = field(init=False)
+    groups: np.ndarray = field(init=False)
+    events_used: np.ndarray = field(init=False)
+    events_discard: np.ndarray = field(init=False)
     evs_test: np.ndarray = field(init=False)
+    predictions: pd.DataFrame = field(init=False)
     results: list = field(init=False)
     results_keys: list = field(init=False)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Initialize classification results
-        self.classifications = self._init_classifications()
+        self._init_predictions()
         self.dist_end = self._handle_exception_files()
         self.fold = 0
         self.results = []
 
-    def run(self):
+    def run(self) -> None:
         """Calculate classification performance and write to *.tsv file."""
 
         # Check for plausability of events
@@ -221,23 +222,27 @@ class Runner:
             self._plot_predictions()
 
         # Save classification performance
-        results_df = pd.DataFrame(
-            data=self.results,
-            columns=[
-                self.scoring,
-                "fold",
-                "channel_name",
-                "feature_importances",
-                "trials_used",
-                "trials_discarded",
-                "IDs_discarded",
-            ],
-        )
-        results_df.to_csv(self.out_file + "_results.tsv", sep="\t")
+        header = [
+            self.scoring,
+            "fold",
+            "channel_name",
+            "feature_importances",
+            "trials_used",
+            "trials_discarded",
+            "IDs_discarded",
+        ]
+        with open(
+            self.out_file + "_results.csv", "w", encoding="UTF8", newline=""
+        ) as file:
+            csvwriter = csv.writer(file, delimiter=",")
+            csvwriter.writerow(header)
+            csvwriter.writerows(self.results)
 
         # Save predictions
-        classif_df = pd.DataFrame.from_dict(data=self.classifications)
-        classif_df.to_csv(self.out_file + "_classif.tsv", sep="\t")
+        with open(self.out_file + "_predictions.json", "w") as fp:
+            json.dump(self.predictions, fp, indent=4)
+        # classif_df = pd.DataFrame.from_dict(data=self.classifications)
+        # classif_df.to_csv(self.out_file + "_classif.tsv", sep="\t")
 
     def _run_outer_cv(self, train_ind, test_ind):
         if self.verbose:
@@ -293,11 +298,13 @@ class Runner:
             imp_scores = imp.importances_mean
             # imp_scores = model.coef_
             score = decoder.get_score(X_test, self.y_test)
+
+            # Add results to list
             self.results.append(
                 [
-                    score,
                     self.fold,
                     ch_pick,
+                    score,
                     imp_scores,
                     len(self.events_used),
                     len(self.events) // 2 - len(self.events_used),
@@ -305,32 +312,72 @@ class Runner:
                 ]
             )
 
-            # Perform predictions
-            features_pred = self._get_feat_array_prediction(
-                self.features[cols].values,
-                self.events,
-                self.evs_test,
+            new_preds = self._make_predictions(
+                model=decoder.model,
+                pred_mode=self.pred_mode,
+                features=self.features[cols].values,
+                events=self.events,
+                events_test=self.evs_test,
                 sfreq=self.sfreq,
-                begin=self.pred_begin,
-                end=self.pred_end,
+                pred_begin=self.pred_begin,
+                pred_end=self.pred_end,
             )
-            if len(features_pred) == 0:
-                pass
-            else:
-                # Make predictions
-                predictions = self._predict_epochs(
-                    decoder.model, features_pred, self.pred_mode
-                )
-                # Add prediction results to dictionary
-                if self.use_channels in ["single", "single_contralat"]:
-                    self.classifications[ch_pick].extend(predictions)
-                else:
-                    self.classifications[ch_type].extend(predictions)
+
+            self.predictions = self._append_predictions(
+                predictions=self.predictions,
+                new_preds=new_preds,
+                use_channels=self.use_channels,
+                ch_pick=ch_pick,
+                ch_type=ch_type,
+            )
+
         self.fold += 1
+
+    def _make_predictions(
+        self,
+        model,
+        pred_mode,
+        features,
+        events,
+        events_test,
+        sfreq,
+        pred_begin,
+        pred_end,
+    ) -> Optional[list]:
+        """Make predictions for events based on given features."""
+        features_pred = self._get_feat_array_prediction(
+            features,
+            events,
+            events_test,
+            sfreq=sfreq,
+            begin=pred_begin,
+            end=pred_end,
+        )
+        if len(features_pred) == 0:
+            return None
+        return self._predict_epochs(model, features_pred, pred_mode)
+
+    @staticmethod
+    def _append_predictions(
+        predictions: dict,
+        new_preds: list,
+        use_channels: str,
+        ch_pick: str,
+        ch_type: str,
+    ) -> dict:
+        """Append new predictions to existing predictions."""
+        if new_preds is None:
+            return predictions
+        # Add prediction results to dictionary
+        if use_channels in ["single", "single_contralat"]:
+            predictions[ch_pick].extend(new_preds)
+        else:
+            predictions[ch_type].extend(new_preds)
+        return predictions
 
     def _plot_predictions(self):
         """Plot predictions."""
-        for ch_name in self.classifications.keys():
+        for ch_name in self.predictions.keys():
             title = (
                 ch_name
                 + ": Classification target "
@@ -339,8 +386,8 @@ class Runner:
                 + str(self.target_end)
             )
             self._plot_channel_predictions(
-                self.classifications[ch_name],
-                label=self.classifications["Movement"],
+                self.predictions[ch_name],
+                label=self.predictions["Movement"],
                 label_name="Movement",
                 title=title,
                 sfreq=self.sfreq,
@@ -373,21 +420,20 @@ class Runner:
                 target_pred[i] = (epoch - epoch.min()) / (
                     epoch.max() - epoch.min()
                 )
-            self.classifications["Movement"].extend(target_pred)
+            self.predictions["Movement"].extend(target_pred.tolist())
 
-    def _init_classifications(self):
+    def _init_predictions(self) -> None:
         """Initialize classification results dictionary."""
-        classifications = {}
-        classifications.update({"Movement": []})
+        self.predictions = {}
+        self.predictions.update({"Movement": []})
         if self.use_channels == "single":
-            classifications.update({ch: [] for ch in self.ch_names})
+            self.predictions.update({ch: [] for ch in self.ch_names})
         elif self.use_channels == "single_contralat":
             side = "L_" if "R_" in self.out_file else "R_"
             ch_names = [ch for ch in self.ch_names if side in ch]
-            classifications.update({ch: [] for ch in ch_names})
+            self.predictions.update({ch: [] for ch in ch_names})
         else:
-            classifications.update({ch: [] for ch in ["ECOG", "LFP"]})
-        return classifications
+            self.predictions.update({ch: [] for ch in ["ECOG", "LFP"]})
 
     def _handle_exception_files(self):
         """Check if current file is listed in exception files."""
@@ -454,7 +500,7 @@ class Runner:
         dist_end,
         artifacts=None,
         verbose=False,
-    ) -> tuple(np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray):
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """"""
         dist_onset = int(dist_onset * sfreq)
         dist_end = int(dist_end * sfreq)
@@ -503,8 +549,9 @@ class Runner:
             np.array(events_discard),
         )
 
+    @staticmethod
     def _get_feat_array_prediction(
-        self, data, events, events_used, sfreq, begin, end
+        data, events, events_used, sfreq, begin, end
     ) -> Union[str, np.ndarray]:
         """"""
         begin = int(begin * sfreq)
@@ -549,8 +596,8 @@ class Runner:
                 baseline = baseline - ind_art
         return baseline
 
+    @staticmethod
     def _get_trial_data(
-        self,
         data,
         events,
         ind: int,
@@ -559,7 +606,7 @@ class Runner:
         rest_beg_ind: int,
         rest_end_ind: int,
         artifacts,
-    ) -> tuple(np.ndarray, np.ndarray, np.ndarray):
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """"""
         data_art = None
         if target_end == "MovementEnd":
@@ -586,12 +633,12 @@ class Runner:
 
     def _inner_loop(
         self,
-        ch_names: list(Any),
+        ch_names: list[Any],
         features: pd.DataFrame,
         labels: np.ndarray,
         groups: np.ndarray,
         cv=GroupShuffleSplit(n_splits=5, test_size=0.2),
-    ) -> list(str, str):
+    ) -> list[str, str]:
         """"""
         results = {ch_name: [] for ch_name in ch_names}
         for train_ind, test_ind in cv.split(features.values, labels, groups):
@@ -611,7 +658,10 @@ class Runner:
                 X_train = np.ascontiguousarray(features_train[cols].values)
                 X_test = np.ascontiguousarray(features_test[cols].values)
                 decoder = get_decoder(
-                    self.classifier, self.balancing, self.optimize
+                    classifier=self.classifier,
+                    balancing=self.balancing,
+                    scoring=self.scoring,
+                    optimize=self.optimize,
                 )
                 decoder.fit(X_train, y_train, groups_train)
                 y_pred = decoder.model.predict(X_test)
@@ -636,23 +686,24 @@ class Runner:
         return [best_ecog, best_lfp]
 
     @staticmethod
-    def _predict_epochs(model, features: np.ndarray, mode: str) -> list(Any):
+    def _predict_epochs(model, features: np.ndarray, mode: str) -> list[list]:
         """"""
         predictions = []
         if features.ndim < 3:
             np.expand_dims(features, axis=0)
         for trial in features:
             if mode == "classification":
-                predictions.append(model.predict(trial))
+                pred = model.predict(trial).tolist()
             elif mode == "probability":
-                predictions.append(model.predict_proba(trial)[:, 1])
+                pred = model.predict_proba(trial)[:, 1].tolist()
             elif mode == "decision_function":
-                predictions.append(model.decision_function(trial))
+                pred = model.decision_function(trial).tolist()
             else:
                 raise ValueError(
                     f"Only `classification`, `probability` or `decision_function` "
                     f"are valid options for `mode`. Got {mode}."
                 )
+            predictions.append(pred)
         return predictions
 
     @staticmethod
@@ -662,7 +713,7 @@ class Runner:
         label_name: str,
         title: str,
         sfreq: Union[int, str],
-        axis_time: Iterable[Union[int, str], Union[int, str]],
+        axis_time: tuple[Union[int, str], Union[int, str]],
         savefig=False,
         show_plot=False,
         filename=None,
@@ -692,24 +743,24 @@ class Runner:
 
 
 def _generate_outpath(
-    root,
-    feature_file,
-    classifier,
-    target_beg,
-    target_en,
-    use_channels_,
-    optimize,
-    use_times,
+    root: str,
+    feature_file: str,
+    classifier: str,
+    target_begin: Union[str, int, float],
+    target_end: Union[str, int, float],
+    use_channels: str,
+    optimize: bool,
+    use_times: int,
 ) -> str:
-    """"""
+    """Generate file name for output files."""
     clf_str = "_" + classifier + "_"
 
     target_str = (
         "movement_"
-        if target_en == "MovementEnd"
-        else "mot_intention_" + str(target_beg) + "_" + str(target_en) + "_"
+        if target_end == "MovementEnd"
+        else "mot_intention_" + str(target_begin) + "_" + str(target_end) + "_"
     )
-    ch_str = use_channels_ + "_chs_"
+    ch_str = use_channels + "_chs_"
     opt_str = "opt_" if optimize else "no_opt_"
     out_name = (
         feature_file
