@@ -6,7 +6,10 @@ from typing import Any, Optional
 import numpy as np
 from bayes_opt import BayesianOptimization
 from catboost import CatBoostClassifier
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.discriminant_analysis import (
+    LinearDiscriminantAnalysis,
+    QuadraticDiscriminantAnalysis,
+)
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, log_loss
 from sklearn.model_selection import GroupShuffleSplit
@@ -45,6 +48,7 @@ def get_decoder(
         "catboost": CATB,
         "lda": LDA,
         "lr": LR,
+        "qda": QDA,
         "svm_lin": SVC_Lin,
         "svm_poly": SVC_Poly,
         "svm_rbf": SVC_RBF,
@@ -319,14 +323,14 @@ class LDA(Decoder):
                 "Hyperparameter optimization cannot be performed for this implementation of"
                 "Linear Discriminant Analysis. Please set `optimize` to False."
             )
-        self.model = LinearDiscriminantAnalysis(
-            solver="lsqr", shrinkage="auto"
-        )
 
     def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
         """"""
         self.data_train, self.labels_train, _ = self._balance_samples(
             data, labels, self.balancing
+        )
+        self.model = LinearDiscriminantAnalysis(
+            solver="svd"  # , shrinkage="auto"
         )
         self.model.fit(self.data_train, self.labels_train)
 
@@ -334,6 +338,32 @@ class LDA(Decoder):
 @dataclass
 class LR(Decoder):
     """Basic representation of class for finding and filtering files."""
+
+
+@dataclass
+class QDA(Decoder):
+    """Class for applying Linear Discriminant Analysis using scikit-learn implementation."""
+
+    def __post_init__(self):
+        if self.balancing == "balance_weights":
+            raise ValueError(
+                "Sample weights cannot be balanced for Quadratic "
+                "Discriminant Analysis. Please set `balance_weights` to"
+                "either `oversample`, `undersample` or `None`."
+            )
+        if self.optimize:
+            raise ValueError(
+                "Hyperparameter optimization cannot be performed for this implementation of"
+                "Quadratic Discriminant Analysis. Please set `optimize` to False."
+            )
+
+    def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
+        """"""
+        self.data_train, self.labels_train, _ = self._balance_samples(
+            data, labels, self.balancing
+        )
+        self.model = QuadraticDiscriminantAnalysis()
+        self.model.fit(self.data_train, self.labels_train)
 
 
 @dataclass
