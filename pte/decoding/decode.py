@@ -330,7 +330,7 @@ class LDA(Decoder):
             data, labels, self.balancing
         )
         self.model = LinearDiscriminantAnalysis(
-            solver="svd"  # , shrinkage="auto"
+            solver="lsqr", shrinkage="auto"
         )
         self.model.fit(self.data_train, self.labels_train)
 

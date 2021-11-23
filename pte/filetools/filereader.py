@@ -1,11 +1,12 @@
 """Find and filter files in given directory. Supports BIDSPath objects from `mne-bids`."""
 
 from dataclasses import dataclass, field
+import os
 from typing import List
 
 import mne_bids
 
-from .filereader_abc import FileReader
+from .filereader_abc import FileReader, DirectoryNotFoundError
 
 
 @dataclass
@@ -28,6 +29,8 @@ class DefaultReader(FileReader):
             extensions (list): e.g. [".json" or "tsv"] (optional)
             verbose (bool): verbosity level (optional, default=True)
         """
+        if not os.path.isdir(directory):
+            raise DirectoryNotFoundError(directory)
         self.directory = directory
         self.files = self._find_files(directory, keywords, extensions, verbose)
 
@@ -67,7 +70,8 @@ class BIDSReader(FileReader):
         """Find files in directory with optional keywords and extensions.
 
 
-        Args:
+        Parameters
+        ----------
             directory (string)
             keywords (list): e.g. ["SelfpacedRota", "ButtonPress] (optional)
             extensions (list): e.g. [".json" or "tsv"] (optional)
@@ -86,6 +90,7 @@ class BIDSReader(FileReader):
         exclude: str = None,
         verbose: bool = True,
     ) -> None:
+        """Filter list of filepaths for given parameters."""
         self.files = [file.basename for file in self.files]
         self._filter_files(
             keywords=keywords,

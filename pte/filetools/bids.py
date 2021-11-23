@@ -189,7 +189,7 @@ def bids_rewrite_file(
         ch_types = raw_copy.get_channel_types(picks=add_chs)
         print("Added channels: ", add_chs)
         print("Added channel types: ", ch_types)
-        for idx in len(add_chs):
+        for idx in range(len(add_chs)):
             add_dict = {
                 df_chs.columns[i]: df_chs.iloc[0][i]
                 for i in range(0, len(df_chs.columns))
@@ -253,7 +253,7 @@ def _rewrite_events(
         BIDSPath object for output path.
     """
     original_path = in_path.copy().update(suffix="events").fpath
-    out_path.copy().update(suffix="events")
+    out_path = out_path.copy().update(suffix="events")
     target_path = os.path.join(out_path.directory, out_path.basename + ".tsv")
     shutil.copyfile(original_path, target_path)
 

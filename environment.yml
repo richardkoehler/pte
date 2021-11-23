@@ -16,4 +16,5 @@ dependencies:
   - plotly
   - scikit-learn
   - scipy
+  - statannotations
   - xgboost

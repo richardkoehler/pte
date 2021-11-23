@@ -1,6 +1,6 @@
 """Module for processing of EMG channels."""
 
-from typing import Union
+from typing import Iterable, Union
 from numba import jit
 import numpy as np
 
@@ -8,14 +8,14 @@ import mne
 
 
 def get_emg_rms(
-    raw,
-    emg_ch,
-    window_len,
-    analog_ch,
-    scaling=1e0,
-    rereference=False,
-    notch_filter=50,
-):
+    raw: mne.io.Raw,
+    emg_ch: Union[str, list[str], np.ndarray],
+    window_len: Union[float, int, Iterable],
+    analog_ch: Union[list, str],
+    scaling: Union[float, int] = 1e0,
+    rereference: bool = False,
+    notch_filter: Union[float, int] = 50,
+) -> mne.io.Raw:
     """Return root mean square with given window length of raw object.
     
     Parameters
@@ -76,7 +76,7 @@ def get_emg_rms(
         ch_types="emg",
         sfreq=raw.info["sfreq"],
     )
-    raw_rms = mne.io.RawArray(data_all, info_rms)
+    raw_rms = mne.io.RawArray(data=data_all, info=info_rms)
     raw_rms.info["meas_date"] = raw.info["meas_date"]
     raw_rms.info["line_freq"] = raw.info["line_freq"]
     raw_rms.set_annotations(raw.annotations)
@@ -87,7 +87,7 @@ def get_emg_rms(
 @jit(nopython=True)
 def _rms_window_nb(
     data: np.ndarray, window_len: Union[float, int], sfreq: Union[float, int]
-):
+) -> np.ndarray:
     """Return root mean square of input signal with given window length.
     
     Parameters

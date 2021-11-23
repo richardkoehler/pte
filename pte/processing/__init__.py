@@ -1,4 +1,4 @@
 """Module for processing electrophysiological data."""
 
-from . import channels
-from . import emg
+from .channels import *
+from .emg import *

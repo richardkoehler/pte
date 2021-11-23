@@ -9,6 +9,7 @@ from .filetools import (
 )
 from .plot import raw_plotly, sig_plotly
 
-from .decode import run_prediction
+from .decoding import run_prediction
 from . import filetools
-from . import process
+from . import processing
+from . import stats

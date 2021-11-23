@@ -38,16 +38,15 @@ class FileReader(ABC):
         exclude: str = None,
         verbose: bool = True,
     ) -> None:
-        """Filter filepaths for given parameters."""
+        """Filter list of filepaths for given parameters."""
 
     @staticmethod
-    def _keyword_search(files, keywords):
+    def _keyword_search(files: list, keywords: list) -> list:
         if not keywords:
             return files
-        filtered_files = []
-        for file in files:
-            if any([kword.lower() in file.lower() for kword in keywords]):
-                filtered_files.append(file)
+        filtered_files = [
+            file for file in files if any([key in file for key in keywords])
+        ]
         return filtered_files
 
     def _print_files(self, files) -> None:
@@ -74,17 +73,13 @@ class FileReader(ABC):
             extensions (list): e.g. [".json" or "tsv"] (optional)
             verbose (bool): verbosity level (optional, default=True)
         """
-        if not os.path.isdir(directory):
-            raise DirectoryNotFoundError(directory)
-        self.directory = directory
 
         files = []
-        for _, _, fnames in os.walk(directory):
+        for root, _, fnames in os.walk(directory):
             fnames = self._keyword_search(fnames, keywords)
             fnames = self._keyword_search(fnames, extensions)
-            files.extend(fnames)
-        if files:
-            files = [os.path.join(directory, file) for file in files]
+            if fnames:
+                files.extend([os.path.join(root, file) for file in fnames])
 
         if verbose:
             self._print_files(files)
@@ -134,8 +129,12 @@ class FileReader(ABC):
         if hemisphere:
             matching_files = []
             for file in filtered_files:
-                entities = mne_bids.get_entities_from_fname(file)
-                hem = settings.ECOG_HEMISPHERES[entities["subject"]] + "_"
+                subject = mne_bids.get_entities_from_fname(file)["subject"]
+                if subject not in settings.ECOG_HEMISPHERES:
+                    raise HemisphereNotSpecifiedError(
+                        subject, settings.ECOG_HEMISPHERES
+                    )
+                hem = settings.ECOG_HEMISPHERES[subject] + "_"
                 if hemisphere.lower() in "ipsilateral" and hem in file:
                     matching_files.append(file)
                 if hemisphere.lower() in "contralateral" and hem not in file:
@@ -163,3 +162,30 @@ class DirectoryNotFoundError(Exception):
 
     def __str__(self):
         return f"{{self.message}} Got: {self.directory}."
+
+
+class HemisphereNotSpecifiedError(Exception):
+    """Exception raised when electrode hemisphere is not specified in settings.
+
+    Attributes:
+        subject -- input subject which caused the error
+        hemisphere -- specified hemispheres
+        message -- explanation of the error
+    """
+
+    def __init__(
+        self,
+        subject,
+        hemispheres,
+        message="Input ECOG hemisphere is not specified in `settings.py` for given subject.",
+    ) -> None:
+        self.subject = subject
+        self.hemispheres = hemispheres
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return (
+            f"{{self.message}} Specified hemispheres: {self.hemispheres}."
+            f"Unspecified subject: {self.subject}."
+        )

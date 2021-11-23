@@ -244,9 +244,9 @@ class Runner:
 
         # Save classification performance
         header = [
-            self.scoring,
             "fold",
             "channel_name",
+            self.scoring,
             "feature_importances",
             "trials_used",
             "trials_discarded",
