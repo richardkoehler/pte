@@ -109,18 +109,22 @@ class BIDSReader(FileReader):
         """Create list of mne-bids BIDSPath objects from list of filepaths."""
         bids_paths = []
         for filepath in filepaths:
-            entities = mne_bids.get_entities_from_fname(filepath)
+            # entities = mne_bids.get_entities_from_fname(filepath)
             try:
-                bids_path = mne_bids.BIDSPath(
-                    subject=entities["subject"],
-                    session=entities["session"],
-                    task=entities["task"],
-                    run=entities["run"],
-                    acquisition=entities["acquisition"],
-                    suffix=entities["suffix"],
-                    extension=extension,
-                    root=self.directory,
+                bids_path = mne_bids.get_bids_path_from_fname(
+                    fname=filepath, verbose=False
                 )
+                bids_path.update(root=self.directory)
+                # bids_path = mne_bids.BIDSPath(
+                #   subject=entities["subject"],
+                #  session=entities["session"],
+                # task=entities["task"],
+                # run=entities["run"],
+                #    acquisition=entities["acquisition"],
+                #   suffix=entities["suffix"],
+                #  extension=extension,
+                # root=self.directory,
+                # )
             except ValueError as err:
                 print(
                     f"ValueError while creating BIDS_Path object for file "

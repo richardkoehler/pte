@@ -14,6 +14,7 @@ ECOG_HEMISPHERES = {
     "FOG010": "R",
     "FOG011": "R",
     "FOG012": "R",
+    "FOG013": "R",
     "FOG014": "R",
     "FOG016": "R",
     "FOG021": "R",

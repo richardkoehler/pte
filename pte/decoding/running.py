@@ -113,7 +113,7 @@ def run_prediction(
         dist_onset=2.0,
         dist_end=1.5,
         exception_files=exceptions,
-        excep_dist_end=0.5,
+        excep_dist_end=0.0,
         use_channels=use_channels,
         pred_begin=-3.0,
         pred_end=2.0,
@@ -344,7 +344,7 @@ class Runner:
                 self._predict_epochs(
                     self.decoder.model, features_pred, self.pred_mode
                 )
-                if features_pred is not None
+                if len(features_pred) != 0
                 else None
             )
 
@@ -366,30 +366,7 @@ class Runner:
 
         self.fold += 1
 
-    def _make_predictions(
-        self,
-        model,
-        pred_mode,
-        features,
-        events,
-        events_test,
-        sfreq,
-        pred_begin,
-        pred_end,
-    ) -> Optional[list]:
-        """Make predictions for events based on given features."""
-        features_pred = self._get_feat_array_prediction(
-            features,
-            events,
-            events_test,
-            sfreq=sfreq,
-            begin=pred_begin,
-            end=pred_end,
-        )
-        if len(features_pred) == 0:
-            return None
-        return self._predict_epochs(model, features_pred, pred_mode)
-
+ 
     @staticmethod
     def _append_results(
         results: dict,
@@ -645,7 +622,7 @@ class Runner:
                 )
         if epochs:
             return np.stack(epochs, axis=0)
-        return
+        return epochs
 
     def _get_baseline_period(
         self,
@@ -873,7 +850,7 @@ def _get_target_df(
     i = 0
     target_df = pd.DataFrame()
     while len(target_df.columns) == 0:
-        target_pick = targets[i]
+        target_pick = targets[i].lower()
         col_picks = [
             col for col in features_df.columns if target_pick in col.lower()
         ]
