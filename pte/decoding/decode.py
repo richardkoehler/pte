@@ -10,6 +10,7 @@ from sklearn.discriminant_analysis import (
     LinearDiscriminantAnalysis,
     QuadraticDiscriminantAnalysis,
 )
+from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, log_loss
 from sklearn.model_selection import GroupShuffleSplit
@@ -46,6 +47,7 @@ def get_decoder(
     """
     CLASSIFIERS = {
         "catboost": CATB,
+        "dummy": Dummy,
         "lda": LDA,
         "lr": LR,
         "qda": QDA,
@@ -54,13 +56,6 @@ def get_decoder(
         "svm_rbf": SVC_RBF,
         "xgb": XGB,
     }
-    BALANCING_METHODS = [
-        "oversample",
-        "undersample",
-        "balance_weights",
-        True,
-        False,
-    ]
     SCORING_METHODS = {
         "balanced_accuracy": _get_balanced_accuracy,
         "log_loss": _get_log_loss,
@@ -74,8 +69,6 @@ def get_decoder(
         raise DecoderNotFoundError(classifier, CLASSIFIERS.keys())
     if scoring not in SCORING_METHODS:
         raise ScoringMethodNotFoundError(scoring, SCORING_METHODS.keys())
-    if all((balancing, balancing not in BALANCING_METHODS)):
-        raise BalancingMethodNotFoundError(balancing, BALANCING_METHODS)
     return CLASSIFIERS[classifier](
         balancing=balancing,
         optimize=optimize,
@@ -107,30 +100,6 @@ class ScoringMethodNotFoundError(Exception):
         input_value,
         allowed,
         message="Input scoring method is not an allowed value.",
-    ) -> None:
-        self.input_value = input_value
-        self.allowed = allowed
-        self.message = message
-        super().__init__(self.message)
-
-    def __str__(self):
-        return f"{{self.message}} Allowed values: {self.allowed}. Got: {self.input_value}."
-
-
-class BalancingMethodNotFoundError(Exception):
-    """Exception raised when invalid balancing method is passed.
-
-    Attributes:
-        input_value -- input value which caused the error
-        allowed -- allowed input values
-        message -- explanation of the error
-    """
-
-    def __init__(
-        self,
-        input_value,
-        allowed,
-        message="Input balancing method is not an allowed value.",
     ) -> None:
         self.input_value = input_value
         self.allowed = allowed
@@ -339,6 +308,86 @@ class LDA(Decoder):
 class LR(Decoder):
     """Basic representation of class for finding and filtering files."""
 
+    def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
+        """"""
+        self.data_train = data
+        self.labels_train = labels
+        self.groups_train = groups
+
+        if self.optimize:
+            self.model = self._bayesian_optimization()
+        else:
+            self.model = LogisticRegression(solver="newton-cg")
+
+        self.data_train, self.labels_train, _ = self._balance_samples(
+            data, labels, self.balancing
+        )
+
+        self.model.fit(self.data_train, self.labels_train)
+
+    def _bayesian_optimization(self):
+        """Estimate optimal model parameters using bayesian optimization."""
+        bo = BayesianOptimization(self._bo_tune, {"C": (0.01, 1.0)})
+        bo.maximize(init_points=10, n_iter=20, acq="ei")
+        # Train outer model with optimized parameters
+        params = bo.max["params"]
+        # params['max_iter'] = int(params['max_iter'])
+        return LogisticRegression(
+            solver="newton-cg", max_iter=500, C=params["C"]
+        )
+
+    def _bo_tune(self, C):
+        # Cross validating with the specified parameters in 5 folds
+        cv_inner = GroupShuffleSplit(
+            n_splits=3, train_size=0.66, random_state=42
+        )
+        scores = []
+
+        for train_index, test_index in cv_inner.split(
+            self.data_train, self.labels_train, self.groups_train
+        ):
+            X_tr, X_te = (
+                self.data_train[train_index],
+                self.data_train[test_index],
+            )
+            y_tr, y_te = (
+                self.labels_train[train_index],
+                self.labels_train[test_index],
+            )
+            X_tr, y_tr, sample_weight = self._balance_samples(
+                X_tr, y_tr, self.balancing
+            )
+            inner_model = LogisticRegression(
+                solver="newton-cg", C=C, max_iter=500
+            )
+            inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
+            y_probs = inner_model.predict_proba(X_te)
+            score = log_loss(y_te, y_probs, labels=[0, 1])
+            scores.append(score)
+        # Return the negative MLOGLOSS
+        return -1.0 * np.mean(scores)
+
+
+@dataclass
+class Dummy(Decoder):
+    """Dummy classifier implementation from scikit learn"""
+
+    def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
+        """"""
+        self.data_train, self.labels_train, _ = self._balance_samples(
+            data, labels, self.balancing
+        )
+        self.model = DummyClassifier(strategy="uniform")
+        self.model.fit(self.data_train, self.labels_train)
+
+    def get_score(self, data_test: np.ndarray, label_test: np.ndarray):
+        """Calculate score."""
+        scores = [
+            self.scoring(self.model, data_test, label_test)
+            for _ in range(0, 100)
+        ]
+        return np.mean(scores)
+
 
 @dataclass
 class QDA(Decoder):
@@ -389,50 +438,6 @@ class SVC_RBF(Decoder):
 @dataclass
 class SVC_Sig(Decoder):
     """"""
-
-
-def classify_lr(X_train, y_train, group_train, optimize, balance):
-    """"""
-
-    def bo_tune(C):
-        # Cross validating with the specified parameters in 5 folds
-        cv_inner = GroupShuffleSplit(
-            n_splits=3, train_size=0.66, random_state=42
-        )
-        scores = []
-        inner_model = LogisticRegression(solver="newton-cg", C=C, max_iter=500)
-        for train_index, test_index in cv_inner.split(
-            X_train, y_train, group_train
-        ):
-            X_tr, X_te = X_train[train_index], X_train[test_index]
-            y_tr, y_te = y_train[train_index], y_train[test_index]
-            X_tr, y_tr, sample_weight = _balance_samples(X_tr, y_tr, balance)
-            inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
-            y_probs = inner_model.predict_proba(X_te)
-            score = log_loss(y_te, y_probs, labels=[0, 1])
-            scores.append(score)
-        # Return the negative MLOGLOSS
-        return -1.0 * np.mean(scores)
-
-    if optimize:
-        # Perform Bayesian Optimization
-        bo = BayesianOptimization(bo_tune, {"C": (0.01, 1.0)})
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
-        # Train outer model with optimized parameters
-        params = bo.max["params"]
-        # params['max_iter'] = int(params['max_iter'])
-        model = LogisticRegression(
-            solver="newton-cg", max_iter=500, C=params["C"]
-        )
-    else:
-        # use default values
-        model = LogisticRegression(solver="newton-cg")
-    # Train outer model
-    X_train, y_train, sample_weight = _balance_samples(
-        X_train, y_train, balance
-    )
-    model.fit(X_train, y_train, sample_weight=sample_weight)
-    return model
 
 
 def classify_svm_lin(X_train, y_train, group_train, optimize, balance):

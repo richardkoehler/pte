@@ -5,7 +5,12 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional
 
 import numpy as np
-from imblearn.over_sampling import RandomOverSampler
+from imblearn.over_sampling import (
+    ADASYN,
+    BorderlineSMOTE,
+    RandomOverSampler,
+    SMOTE,
+)
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.utils.class_weight import compute_sample_weight
@@ -76,11 +81,44 @@ class Decoder(ABC):
         sample_weight: numpy.ndarray of shape (n_samples, ) | None
             Sample weights if method = 'weight' else None
         """
+        BALANCING_METHODS = [
+            "oversample",
+            "smote",
+            "borderline_smote",
+            "adasyn",
+            "undersample",
+            "balance_weights",
+            True,
+            False,
+        ]
         sample_weight = None
         if np.mean(target) != 0.5:
             if method == "oversample":
                 ros = RandomOverSampler(sampling_strategy="auto")
                 data, target = ros.fit_resample(data, target)
+            elif method == "smote":
+                ros = SMOTE(sampling_strategy="auto", k_neighbors=5)
+                data, target = ros.fit_resample(data, target)
+            elif method == "borderline_smote":
+                ros = BorderlineSMOTE(
+                    sampling_strategy="auto",
+                    k_neighbors=5,
+                    kind="borderline-1",
+                )
+                data, target = ros.fit_resample(data, target)
+            elif method == "adasyn":
+                try:
+                    ros = ADASYN(sampling_strategy="auto", n_neighbors=5)
+                    data, target = ros.fit_resample(data, target)
+                except ValueError as e:
+                    if (
+                        len(e.args) > 0
+                        and e.args[0]
+                        == "No samples will be generated with the provided ratio settings."
+                    ):
+                        pass
+                    else:
+                        raise e
             elif method == "undersample":
                 ros = RandomUnderSampler(sampling_strategy="auto")
                 data, target = ros.fit_resample(data, target)
@@ -89,7 +127,30 @@ class Decoder(ABC):
                     class_weight="balanced", y=target
                 )
             else:
-                raise ValueError(
-                    f"Method not identified. Given method was " f"{method}."
-                )
+                raise BalancingMethodNotFoundError(method, BALANCING_METHODS)
         return data, target, sample_weight
+
+
+class BalancingMethodNotFoundError(Exception):
+    """Exception raised when invalid balancing method is passed.
+
+    Attributes:
+        input_value -- input value which caused the error
+        allowed -- allowed input values
+        message -- explanation of the error
+    """
+
+    def __init__(
+        self,
+        input_value,
+        allowed,
+        message="Input balancing method is not an allowed value.",
+    ) -> None:
+        self.input_value = input_value
+        self.allowed = allowed
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return f"{{self.message}} Allowed values: {self.allowed}. Got: {self.input_value}."
+
