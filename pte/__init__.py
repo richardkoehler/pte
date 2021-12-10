@@ -2,12 +2,12 @@
 
 from .filetools import (
     add_coord_column,
-    get_filereader,
+    get_filefinder,
     loadmat,
-    bids_rewrite_file,
-    bids_get_coords,
+    rewrite_bids_file,
+    get_bids_coords,
 )
-from .plot import raw_plotly, sig_plotly
+from .plotting import raw_plotly, sig_plotly
 
 from .decoding import run_prediction
 from . import filetools

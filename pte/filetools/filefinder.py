@@ -6,11 +6,11 @@ from typing import List
 
 import mne_bids
 
-from .filereader_abc import FileReader, DirectoryNotFoundError
+from .filefinder_abc import FileFinder, DirectoryNotFoundError
 
 
 @dataclass
-class DefaultReader(FileReader):
+class DefaultFinder(FileFinder):
     """Class for finding and handling any type of file."""
 
     def find_files(
@@ -55,7 +55,7 @@ class DefaultReader(FileReader):
 
 
 @dataclass
-class BIDSReader(FileReader):
+class BIDSFinder(FileFinder):
     """Class for finding and handling data files in BIDS-compliant format."""
 
     bids_root: str = field(init=False)
@@ -79,7 +79,7 @@ class BIDSReader(FileReader):
         """
         self.directory = directory
         files = self._find_files(self.directory, keywords, extensions, verbose)
-        self.files = self._make_bids_paths(files, ".vhdr")
+        self.files = self._make_bids_paths(files)
 
     def filter_files(
         self,
@@ -91,7 +91,7 @@ class BIDSReader(FileReader):
         verbose: bool = True,
     ) -> None:
         """Filter list of filepaths for given parameters."""
-        self.files = [file.basename for file in self.files]
+        self.files = [str(file.fpath.resolve()) for file in self.files]
         self._filter_files(
             keywords=keywords,
             hemisphere=hemisphere,
@@ -100,10 +100,10 @@ class BIDSReader(FileReader):
             exclude=exclude,
             verbose=verbose,
         )
-        self.files = self._make_bids_paths(self.files, ".vhdr")
+        self.files = self._make_bids_paths(self.files)
 
     def _make_bids_paths(
-        self, filepaths: List[str], extension: str = ".vhdr",
+        self, filepaths: List[str]
     ) -> List[mne_bids.BIDSPath]:
 
         """Create list of mne-bids BIDSPath objects from list of filepaths."""
@@ -115,16 +115,6 @@ class BIDSReader(FileReader):
                     fname=filepath, verbose=False
                 )
                 bids_path.update(root=self.directory)
-                # bids_path = mne_bids.BIDSPath(
-                #   subject=entities["subject"],
-                #  session=entities["session"],
-                # task=entities["task"],
-                # run=entities["run"],
-                #    acquisition=entities["acquisition"],
-                #   suffix=entities["suffix"],
-                #  extension=extension,
-                # root=self.directory,
-                # )
             except ValueError as err:
                 print(
                     f"ValueError while creating BIDS_Path object for file "
@@ -135,8 +125,8 @@ class BIDSReader(FileReader):
         return bids_paths
 
 
-def get_filereader(datatype: str) -> FileReader:
-    """Create and return FileReader of desired type.
+def get_filefinder(datatype: str) -> FileFinder:
+    """Create and return FileFinder of desired type.
 
     Parameters
     ----------
@@ -145,38 +135,38 @@ def get_filereader(datatype: str) -> FileReader:
 
     Returns
     -------
-    FileReader
-        Instance of FileReader for reading given `datatype`.
+    FileFinder
+        Instance of FileFinder for reading given `datatype`.
     """
-    readers = {
-        "any": DefaultReader,
-        "bids": BIDSReader,
+    finders = {
+        "any": DefaultFinder,
+        "bids": BIDSFinder,
     }
     datatype = datatype.lower()
-    if datatype in readers:
-        return readers[datatype]()
-    raise ReaderNotFoundError(datatype, readers)
+    if datatype in finders:
+        return finders[datatype]()
+    raise FinderNotFoundError(datatype, finders)
 
 
-class ReaderNotFoundError(Exception):
-    """Exception raised when invalid Reader is passed.
+class FinderNotFoundError(Exception):
+    """Exception raised when invalid Finder is passed.
 
     Attributes:
         datatype -- input datatype which caused the error
-        readers -- allowed datatypes
+        finders -- allowed datatypes
         message -- explanation of the error
     """
 
     def __init__(
         self,
         datatype,
-        readers,
+        finders,
         message="Input datatype is not an allowed value.",
     ) -> None:
         self.datatype = datatype
-        self.readers = readers.values
+        self.finders = finders.values
         self.message = message
         super().__init__(self.message)
 
     def __str__(self):
-        return f"{{self.message}} Allowed values: {self.readers}. Got: {self.datatype}."
+        return f"{{self.message}} Allowed values: {self.finders}. Got: {self.datatype}."

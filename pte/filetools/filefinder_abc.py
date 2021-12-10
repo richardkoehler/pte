@@ -1,4 +1,4 @@
-"""Define abstract base classes to construct FileReader classes."""
+"""Define abstract base classes to construct FileFinder classes."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
@@ -11,7 +11,7 @@ from .. import settings
 
 
 @dataclass
-class FileReader(ABC):
+class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
     directory: str = field(init=False)
@@ -76,10 +76,11 @@ class FileReader(ABC):
 
         files = []
         for root, _, fnames in os.walk(directory):
+            fnames = [os.path.join(root, file) for file in fnames]
             fnames = self._keyword_search(fnames, keywords)
             fnames = self._keyword_search(fnames, extensions)
             if fnames:
-                files.extend([os.path.join(root, file) for file in fnames])
+                files.extend([file for file in fnames])
 
         if verbose:
             self._print_files(files)
@@ -105,11 +106,12 @@ class FileReader(ABC):
         if keywords:
             if isinstance(keywords, str):
                 keywords = [keywords]
-            filtered_files = [
-                file
-                for file in filtered_files
-                if any([key in file for key in keywords])
-            ]
+            filtered_files = self._keyword_search(filtered_files, keywords)
+            # filtered_files = [
+            #   file
+            #  for file in filtered_files
+            # if any([key in file for key in keywords])
+            # ]
         if stimulation:
             if stimulation.lower() in "stimon":
                 stim = "StimOn"
@@ -117,7 +119,7 @@ class FileReader(ABC):
                 stim = "StimOff"
             else:
                 raise ValueError("Keyword for stimulation not valid.")
-            filtered_files = [file for file in filtered_files if stim in file]
+            filtered_files = self._keyword_search(filtered_files, [stim])
         if medication:
             if medication.lower() in "medon":
                 med = "MedOn"
@@ -125,7 +127,7 @@ class FileReader(ABC):
                 med = "MedOff"
             else:
                 raise ValueError("Keyword for medication not valid.")
-            filtered_files = [file for file in filtered_files if med in file]
+            filtered_files = self._keyword_search(filtered_files, [med])
         if hemisphere:
             matching_files = []
             for file in filtered_files:
@@ -161,7 +163,7 @@ class DirectoryNotFoundError(Exception):
         super().__init__(self.message)
 
     def __str__(self):
-        return f"{{self.message}} Got: {self.directory}."
+        return f"{self.message} Got: {self.directory}."
 
 
 class HemisphereNotSpecifiedError(Exception):
@@ -186,6 +188,6 @@ class HemisphereNotSpecifiedError(Exception):
 
     def __str__(self):
         return (
-            f"{{self.message}} Specified hemispheres: {self.hemispheres}."
+            f"{self.message} Specified hemispheres: {self.hemispheres}."
             f"Unspecified subject: {self.subject}."
         )
