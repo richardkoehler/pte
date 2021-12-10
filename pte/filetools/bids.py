@@ -42,7 +42,7 @@ def add_coord_column(
     return df_chs
 
 
-def bids_save_file(
+def save_bids_file(
     raw: mne.io.Raw, bids_path: mne_bids.BIDSPath
 ) -> mne.io.Raw:
     """Write preloaded data to BrainVision file in BIDS format.
@@ -128,7 +128,7 @@ def _get_mapping_dict(ch_names: List[str]) -> dict:
     return remapping_dict
 
 
-def bids_rewrite_file(
+def rewrite_bids_file(
     raw: mne.io.Raw, bids_path: mne_bids.BIDSPath
 ) -> mne.io.Raw:
     """Overwrite BrainVision data in BIDS format that has been modified.
@@ -155,7 +155,7 @@ def bids_rewrite_file(
     if not os.path.isdir(temp_root):
         os.mkdir(temp_root)
     temp_path = curr_path.copy().update(root=temp_root)
-    raw_copy.info["dig"] = None
+    raw.set_montage(None)
     mne_bids.write_raw_bids(
         raw_copy,
         temp_path,
@@ -258,7 +258,7 @@ def _rewrite_events(
     shutil.copyfile(original_path, target_path)
 
 
-def bids_get_coords(
+def get_bids_coords(
     fname: str, root: str, space: str = "MNI152NLin2009bAsym"
 ) -> pd.DataFrame:
     """Read *electrodes.tsv file and return as pandas DataFrame.

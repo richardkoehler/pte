@@ -5,12 +5,14 @@ import json
 import os
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
 import sklearn
 from matplotlib import pyplot as plt
+from pte.decoding.decode_abc import Decoder
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import balanced_accuracy_score
 from sklearn.model_selection import (
@@ -18,8 +20,6 @@ from sklearn.model_selection import (
     GroupShuffleSplit,
     LeaveOneGroupOut,
 )
-
-from pte.decoding.decode_abc import Decoder
 
 from ..settings import PATH_PYNEUROMODULATION
 from .decode import get_decoder
@@ -45,6 +45,8 @@ def run_prediction(
     scoring="balanced_accuracy",
     feature_importance=False,
     plot_target_channels=None,
+    artifact_channels=None,
+    bad_events_path=None,
     pred_mode="classify",
     use_times=1,
     dist_onset=2.0,
@@ -76,14 +78,28 @@ def run_prediction(
         )
         return
 
+    bad_events = None
+    if bad_events_path:
+        bad_events_path = Path(bad_events_path)
+        if bad_events_path.is_dir():
+            basename = Path(feature_file).stem
+            bad_events_path = bad_events_path / (basename + "_bad_epochs.csv")
+        if not bad_events_path.exists():
+            print(f"No bad epochs file found for: {str(feature_file)}")
+        else:
+            bad_events = pd.read_csv(
+                bad_events_path, index_col=0
+            ).event_id.values
+
     # Pick target for plotting predictions
     target_df = _get_target_df(plot_target_channels, features)
 
     features_df = _get_feature_df(features, use_features, use_times)
 
     # Pick artifact channel
-    artifacts = []
-    # artifacts = nm_reader.read_label(ARTIFACT_CHANNELS)
+    artifacts = None
+    if artifact_channels:
+        artifacts = _get_target_df(artifact_channels, features).values
 
     # Generate output file name
     out_path = _generate_outpath(
@@ -110,6 +126,7 @@ def run_prediction(
         target_df=target_df,
         label_df=label_df,
         artifacts=artifacts,
+        bad_events=bad_events,
         ch_names=settings["ch_names"],
         sfreq=settings["sampling_rate_features"],
         classifier=classifier,
@@ -143,17 +160,18 @@ class Runner:
     features: pd.DataFrame
     target_df: pd.DataFrame
     label_df: pd.DataFrame
-    artifacts: np.ndarray
     ch_names: list
     out_file: str
     decoder: Any
+    artifacts: Optional[np.ndarray] = None
+    bad_events: Optional[np.ndarray] = None
     sfreq: int = 10
     classifier: str = "lda"
     balancing: str = "oversample"
     scoring: str = "balanced_accuracy"
     optimize: bool = False
-    target_begin: Union[str, float, int] = "TrialOnset"
-    target_end: Union[str, float, int] = "TrialEnd"
+    target_begin: Union[str, float, int] = "trial_onset"
+    target_end: Union[str, float, int] = "trial_end"
     dist_onset: Union[float, int] = 2.0
     dist_end: Union[float, int] = 2.0
     exception_files: Optional[list] = None
@@ -191,6 +209,10 @@ class Runner:
 
     def __post_init__(self) -> None:
         # Initialize classification results
+        if self.target_begin == "trial_onset":
+            self.target_begin = 0.0
+        if self.target_end == "trial_onset":
+            self.target_end = 0.0
         self.side = "R_" if "R_" in self.out_file else "R_"
         self.ch_names = self._init_channel_names(
             self.ch_names, self.use_channels, self.side
@@ -203,6 +225,9 @@ class Runner:
             self.ch_names, self.use_channels, self.target_name
         )
         self.label_name = self.label_df.name
+
+        if self.bad_events is None:
+            self.bad_events = np.atleast_1d([])
 
         self.predictions["Label"] = []
         self.predictions["LabelName"] = self.label_name
@@ -238,6 +263,7 @@ class Runner:
             dist_onset=self.dist_onset,
             dist_end=self.dist_end,
             artifacts=self.artifacts,
+            bad_epochs=self.bad_events,
             verbose=self.verbose,
         )
 
@@ -285,17 +311,23 @@ class Runner:
             csvwriter.writerows(self.results)
 
         # Save predictions time-locked to trial onset
-        with open(self.out_file + "_predictions_time-locked.json", "w") as fp:
-            json.dump(self.predictions, fp, indent=4)
+        with open(
+            self.out_file + "_predictions_timelocked.json",
+            "w",
+            encoding="utf-8",
+        ) as file:
+            json.dump(self.predictions, file)
 
         # Save features time-locked to trial onset
-        with open(self.out_file + "_features_time-locked.json", "w") as fp:
-            json.dump(self.features_dict, fp, indent=4)
+        with open(
+            self.out_file + "_features_timelocked.json", "w", encoding="utf-8"
+        ) as file:
+            json.dump(self.features_dict, file)
 
         # Save all features used for classificaiton
         self.feature_epochs["Label"] = self.labels
-        self.feature_epochs.to_json(
-            self.out_file + "_features_concatenated.json"
+        self.feature_epochs.to_csv(
+            self.out_file + "_features_concatenated.csv",
         )
 
     def _run_outer_cv(self, train_ind, test_ind):
@@ -343,7 +375,7 @@ class Runner:
             sfreq=self.sfreq,
             begin=self.pred_begin,
             end=self.pred_end,
-            verbose=True
+            verbose=True,
         )
         if target_pred.size > 0:
             self.predictions = self._add_label(
@@ -605,9 +637,20 @@ class Runner:
         return picks[self.use_channels]
 
     @staticmethod
-    def _discard_trial(baseline: int, data_artifacts: np.ndarray) -> bool:
+    def _discard_trial(
+        baseline: int,
+        data_artifacts: Optional[np.ndarray],
+        index_epoch: int,
+        bad_epochs: Union[np.ndarray, list],
+    ) -> bool:
         """"""
-        if any((baseline <= 0.0, np.count_nonzero(data_artifacts))):
+        if any(
+            (
+                baseline <= 0.0,
+                np.count_nonzero(data_artifacts),
+                index_epoch in bad_epochs,
+            )
+        ):
             return True
         return False
 
@@ -621,6 +664,7 @@ class Runner:
         dist_onset,
         dist_end,
         artifacts=None,
+        bad_epochs=None,
         verbose=False,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """"""
@@ -630,7 +674,7 @@ class Runner:
         rest_beg, rest_end = -5.0, -2.0
         rest_end_ind = int(rest_end * sfreq)
         target_begin = int(target_begin * sfreq)
-        if target_end != "TrialEnd":
+        if target_end != "trial_end":
             target_end = int(target_end * sfreq)
 
         X, y, events_used, group_list, events_discard = [], [], [], [], []
@@ -652,7 +696,12 @@ class Runner:
                 rest_end_ind,
                 artifacts,
             )
-            if not self._discard_trial(baseline_period, data_art):
+            if not self._discard_trial(
+                baseline=baseline_period,
+                data_artifacts=data_art,
+                index_epoch=i,
+                bad_epochs=bad_epochs,
+            ):
                 X.extend((data_rest, data_target))
                 y.extend((np.zeros(len(data_rest)), np.ones(len(data_target))))
                 events_used.append(ind)
@@ -736,11 +785,11 @@ class Runner:
         target_end: Union[int, str],
         rest_beg_ind: int,
         rest_end_ind: int,
-        artifacts,
+        artifacts: Optional[np.ndarray],
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         """"""
         data_art = None
-        if target_end == "TrialEnd":
+        if target_end == "trial_end":
             data_rest = data[
                 events[ind] + rest_beg_ind : events[ind] + rest_end_ind
             ]
@@ -878,25 +927,17 @@ def _generate_outpath(
     use_times: int,
 ) -> str:
     """Generate file name for output files."""
-    clf_str = "_" + classifier + "_"
-
-    target_str = (
-        "movement_"
-        if target_end == "TrialEnd"
-        else "mot_intention_" + str(target_begin) + "_" + str(target_end) + "_"
-    )
-    ch_str = use_channels + "_chs_"
-    opt_str = "opt_" if optimize else "no_opt_"
-    out_name = (
-        feature_file
-        + clf_str
-        + target_str
-        + ch_str
-        + opt_str
-        + str(use_times * 100)
-        + "ms"
-    )
-    return os.path.join(root, feature_file, out_name)
+    if target_begin == 0.0:
+        target_begin = "trial_begin"
+    if target_end == 0.0:
+        target_end = "trial_begin"
+    target_str = "_".join(("decode", str(target_begin), str(target_end)))
+    clf_str = "_".join(("model", classifier))
+    ch_str = "_".join(("chs", use_channels))
+    opt_str = "opt_yes" if optimize else "opt_no"
+    feat_str = "_".join(("feats", str(use_times * 100), "ms"))
+    out_name = "_".join((target_str, clf_str, ch_str, opt_str, feat_str))
+    return os.path.join(root, out_name, feature_file, feature_file)
 
 
 def _events_from_label(
@@ -940,7 +981,7 @@ def _get_target_df(
             target_df[col] = features_df[col]
         i += 1
     if verbose:
-        print("Target channel used: ", target_df.columns[0])
+        print("Channel used: ", target_df.columns[0])
     return target_df
 
 

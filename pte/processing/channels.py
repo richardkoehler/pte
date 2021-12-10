@@ -49,7 +49,7 @@ def add_squared_channel(
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]
     )
     raw_sq = mne.io.RawArray(onoff, info)
-    raw_sq.info["meas_date"] = raw.info["meas_date"]
+    raw_sq.info.set_meas_date(raw.info["meas_date"])
     raw_sq.info["line_freq"] = 50
     raw_final = (
         raw.copy().load_data().add_channels([raw_sq], force_update_info=True)
