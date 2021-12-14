@@ -41,8 +41,6 @@ class Runner:
     target_end: Union[str, float, int] = "trial_end"
     dist_onset: Union[float, int] = 2.0
     dist_end: Union[float, int] = 2.0
-    exception_files: Optional[list] = None
-    excep_dist_end: Union[float, int] = 0.0
     use_channels: str = "single"
     pred_begin: Union[float, int] = -3.0
     pred_end: Union[float, int] = 3.0
@@ -80,7 +78,7 @@ class Runner:
             self.target_begin = 0.0
         if self.target_end == "trial_onset":
             self.target_end = 0.0
-        self.side = "R_" if "R_" in self.out_file else "R_"
+        self.side = "R_" if "R_" in self.out_file else "L_"
         self.ch_names = self._init_channel_names(
             self.ch_names, self.use_channels, self.side
         )
@@ -101,8 +99,6 @@ class Runner:
         self.features_dict["Label"] = []
         self.features_dict["LabelName"] = self.label_name
         self.features_dict["ChannelNames"] = self.ch_names
-
-        self.dist_end = self._handle_exception_files()
 
         # Calculate events from label
         self.events = _events_from_label(self.label_df.values, self.verbose)
@@ -144,6 +140,10 @@ class Runner:
 
     def run(self) -> None:
         """Calculate classification performance and out results."""
+
+        print(
+            f"Use channels: {self.use_channels}, Channels picked: {self.ch_names}"
+        )
         # Outer cross-validation
         for train_ind, test_ind in self.cv_outer.split(
             self.data_epochs, self.labels, self.groups
@@ -202,13 +202,13 @@ class Runner:
             print(f"Fold no.: {self.fold}")
 
         # Get training and testing data and labels
-        self.features_train, self.features_test = (
+        features_train, features_test = (
             self.feature_epochs.iloc[train_ind],
             self.feature_epochs.iloc[test_ind],
         )
-        self.y_train = np.ascontiguousarray(self.labels[train_ind])
-        self.y_test = np.ascontiguousarray(self.labels[test_ind])
-        self.groups_train = self.groups[train_ind]
+        y_train = self.labels[train_ind]
+        y_test = self.labels[test_ind]
+        groups_train = self.groups[train_ind]
 
         # Get prediction epochs
         self.evs_test = np.unique(self.groups[test_ind]) * 2
@@ -257,32 +257,32 @@ class Runner:
             )
 
         # Handle which channels are used
-        ch_picks = self._get_ch_picks()
+        ch_picks = self._get_ch_picks(
+            features_train, y_train, groups_train, self.cv_inner
+        )
 
         # Infer channel types
         ch_types = ["ECOG" if "ECOG" in ch else "LFP" for ch in ch_picks]
 
         # Perform classification for each selected model
         for ch_pick, ch_type in zip(ch_picks, ch_types):
-            cols = [
-                col for col in self.features_train.columns if ch_pick in col
-            ]
+            cols = [col for col in features_train.columns if ch_pick in col]
             if self.verbose:
                 print("Channel: ", ch_pick)
                 print("Number of features used: ", len(cols))
 
-            X_train = np.ascontiguousarray(self.features_train[cols].values)
-            X_test = np.ascontiguousarray(self.features_test[cols].values)
+            X_train = features_train[cols]
+            X_test = features_test[cols]
 
-            self.decoder.fit(X_train, self.y_train, self.groups_train)
+            self.decoder.fit(X_train, y_train, groups_train)
 
-            score = self.decoder.get_score(X_test, self.y_test)
+            score = self.decoder.get_score(X_test, y_test)
 
             feature_importances = self._get_importances(
                 feature_importance=self.feature_importance,
                 decoder=self.decoder,
                 data=X_test,
-                label=self.y_test,
+                label=y_test,
                 scoring=self.scoring,
             )
 
@@ -427,81 +427,58 @@ class Runner:
         ch_names: list, use_channels: str, side: str
     ) -> list:
         """Initialize channels to be used."""
-        if use_channels in ["single", "single_best", "all"]:
+        case_all = ["single", "single_best", "all"]
+        case_contralateral = [
+            "single_contralat",
+            "single_best_contralat",
+            "all_contralat",
+        ]
+        case_ipsilateral = [
+            "single_ipsilat",
+            "single_best_ipsilat",
+            "all_ipsilat",
+        ]
+        if use_channels in case_all:
             return ch_names
-        if use_channels in ["single_contralat", "all_contralat"]:
+        if use_channels in case_contralateral:
             return [ch for ch in ch_names if side not in ch]
-        if use_channels in ["single_ipsilat", "all_ipsilat"]:
+        if use_channels in case_ipsilateral:
             return [ch for ch in ch_names if side in ch]
+        raise ValueError(
+            f"Got false value for `use_channels`. Must be one of "
+            f"{case_all+case_contralateral+case_ipsilateral}. Got: {use_channels}."
+        )
 
     @staticmethod
     def _init_results(
         ch_names: list, use_channels: str, target_name: str
     ) -> dict:
         """Initialize results dictionary."""
-        results = {}
-        results.update({"Target": []})
-        results.update({"TargetName": target_name})
+        results = {"Target": [], "TargetName": target_name}
         if use_channels in [
             "all",
             "all_contralat",
             "all_ipsilat",
             "single_best",
+            "single_best_contralat",
+            "single_best_ipsilat",
         ]:
             results.update({ch: [] for ch in ["ECOG", "LFP"]})
         elif use_channels in ["single", "single_contralat", "single_ipsilat"]:
             results.update({ch: [] for ch in ch_names})
         else:
             raise ValueError(
-                f"Input `use_channels` not valid. Got: {use_channels}."
+                f"Input value for `use_channels` not allowed. Got: {use_channels}."
             )
         return results
 
-    def _handle_exception_files(self):
-        """Check if current file is listed in exception files."""
-        if all(
-            (
-                self.exception_files,
-                any([exc in self.out_file for exc in self.exception_files]),
-            )
-        ):
-            print(
-                "Exception file recognized: ", os.path.basename(self.out_file)
-            )
-            return self.excep_dist_end
-        return self.dist_end
-
-    def _get_ch_picks(self) -> list:
+    def _get_ch_picks(self, features, y, groups, cv) -> list:
         """Handle channel picks."""
-        picks = {
-            "single": self.ch_names,
-            "single_contralat": [
-                ch for ch in self.ch_names if self.side not in ch
-            ],
-            "single_ipsilat": [ch for ch in self.ch_names if self.side in ch],
-            # "single_best": sorted(
-            #     self._inner_loop(
-            #         self.ch_names,
-            #         self.features_train,
-            #         self.y_train,
-            #         self.groups_train,
-            #         self.cv_inner,
-            #     )
-            # ),
-            "all": ["ECOG", "LFP"],
-            "all_ipsilat": (
-                ["ECOG", "LFP_L"] if self.side == "L_" else ["ECOG", "LFP_R"]
-            ),
-            "all_contralat": (
-                ["ECOG", "LFP_R"] if self.side == "L_" else ["ECOG", "LFP_L"]
-            ),
-        }
-        if self.use_channels not in picks:
-            raise ValueError(
-                f"use_channels keyword not valid. Must be one of {picks.keys}: "
-                f"{self.use_channels}"
-            )
-        return picks[self.use_channels]
+        if "single_best" in self.use_channels:
+            return self._inner_loop(self.ch_names, features, y, groups, cv)
+        if "all" in self.use_channels:
+            return ["ECOG", "LFP"]
+        return self.ch_names
 
     @staticmethod
     def _discard_trial(
@@ -693,17 +670,14 @@ class Runner:
                 features.iloc[train_ind],
                 features.iloc[test_ind],
             )
-            y_train, y_test = (
-                np.ascontiguousarray(labels[train_ind]),
-                np.ascontiguousarray(labels[test_ind]),
-            )
+            y_train, y_test = labels[train_ind], labels[test_ind]
             groups_train = groups[train_ind]
             for ch_name in ch_names:
                 cols = [
                     col for col in features_train.columns if ch_name in col
                 ]
-                X_train = np.ascontiguousarray(features_train[cols].values)
-                X_test = np.ascontiguousarray(features_test[cols].values)
+                X_train = features_train[cols].values
+                X_test = features_test[cols].values
                 self.decoder.fit(X_train, y_train, groups_train)
                 y_pred = self.decoder.model.predict(X_test)
                 accuracy = balanced_accuracy_score(y_test, y_pred)
@@ -781,7 +755,6 @@ class Runner:
             plt.show()
         else:
             plt.close(fig)
-
 
 
 def _events_from_label(
