@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import mne_bids
 
@@ -41,9 +41,11 @@ class FileFinder(ABC):
         """Filter list of filepaths for given parameters."""
 
     @staticmethod
-    def _keyword_search(files: list, keywords: list) -> list:
+    def _keyword_search(files: list, keywords: Union[str, list]) -> list:
         if not keywords:
             return files
+        if not isinstance(keywords, list):
+            keywords = [keywords]
         filtered_files = [
             file for file in files if any([key in file for key in keywords])
         ]
@@ -98,6 +100,8 @@ class FileFinder(ABC):
         """Filter list of filepaths for given parameters and return filtered list."""
         filtered_files = self.files
         if exclude:
+            if isinstance(exclude, str):
+                exclude = [exclude]
             filtered_files = [
                 file
                 for file in filtered_files
