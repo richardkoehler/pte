@@ -2,7 +2,7 @@
 import os
 import sys
 from pathlib import Path
-from typing import Iterable, Union
+from typing import Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -37,7 +37,7 @@ def run_experiment(
     pred_mode="classify",
     use_times=1,
     dist_onset=2.0,
-    dist_end=0.5,
+    dist_end=2.0,
     excep_dist_end=0.5,
     exceptions=None,
     save_plot=True,
@@ -100,6 +100,13 @@ def run_experiment(
         use_times,
     )
 
+    dist_end = _handle_exception_files(
+        fullpath=out_path,
+        exception_files=exceptions,
+        dist_end=dist_end,
+        excep_dist_end=excep_dist_end,
+    )
+
     decoder = get_decoder(
         classifier=classifier,
         scoring=scoring,
@@ -124,8 +131,6 @@ def run_experiment(
         target_end=target_end,
         dist_onset=dist_onset,
         dist_end=dist_end,
-        exception_files=exceptions,
-        excep_dist_end=excep_dist_end,
         use_channels=use_channels,
         pred_begin=-3.0,
         pred_end=2.0,
@@ -138,6 +143,21 @@ def run_experiment(
         verbose=verbose,
     )
     runner.run()
+
+
+def _handle_exception_files(
+    fullpath: str,
+    exception_files: Optional[Iterable],
+    dist_end: Union[int, float],
+    excep_dist_end: Union[int, float],
+):
+    """Check if current file is listed in exception files."""
+    if all(
+        (exception_files, any([exc in fullpath for exc in exception_files]),)
+    ):
+        print("Exception file recognized: ", os.path.basename(fullpath))
+        return excep_dist_end
+    return dist_end
 
 
 def _generate_outpath(
@@ -167,19 +187,7 @@ def _generate_outpath(
 def _get_feature_df(
     features: pd.DataFrame, use_features: Iterable, use_times: int
 ) -> pd.DataFrame:
-    """
-
-    Parameters
-    ----------
-    features
-    use_features
-    use_times
-
-    Returns
-    -------
-
-    """
-    # Extract features to use from dataframe
+    """Extract features to use from given DataFrame"""
     column_picks = [
         col
         for col in features.columns
@@ -209,32 +217,6 @@ def _get_feature_df(
 
     # Return final features dataframe
     return pd.concat(feat_list, axis=1).fillna(0.0)
-
-
-def _events_from_label(
-    label_data: np.ndarray, verbose: bool = False
-) -> np.ndarray:
-    """
-
-    Parameters
-    ----------
-    label_data
-    verbose
-
-    Returns
-    -------
-    events
-    """
-    label_diff = np.zeros_like(label_data, dtype=int)
-    label_diff[1:] = np.diff(label_data)
-    if label_data[0] != 0:
-        label_diff[0] = 1
-    if label_data[-1] != 0:
-        label_diff[-1] = -1
-    events = np.nonzero(label_diff)[0]
-    if verbose:
-        print(f"Number of events detected: {len(events) / 2}")
-    return events
 
 
 def _get_target_df(
