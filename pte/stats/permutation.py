@@ -5,7 +5,7 @@ import numpy as np
 
 
 @njit
-def permutation_onesample(x, y, n_perm, two_tailed=True):
+def permutation_onesample(x, y, n_perm=10000, two_tailed=True):
     """Perform permutation test with one-sample distribution.
 
     Parameters
@@ -49,7 +49,7 @@ def permutation_onesample(x, y, n_perm, two_tailed=True):
 
 
 @njit
-def permutation_twosample(x, y, n_perm, two_tailed=True):
+def permutation_twosample(x, y, n_perm=10000, two_tailed=True):
     """Perform permutation test.
 
     Parameters
