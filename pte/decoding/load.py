@@ -5,11 +5,97 @@ from typing import Iterable, Optional, Union
 import mne_bids
 
 import numpy as np
+import pandas as pd
 import pte
 
 
+def load_results(
+    files_or_dir: Union[str, list, Path],
+    keywords: Optional[Union[str, list]] = None,
+    scoring_key: str = "balanced_accuracy",
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load prediciton results from *results.csv"""
+    # Create Dataframes from Files
+    if not isinstance(files_or_dir, list):
+        file_finder = pte.get_filefinder(datatype="any")
+        file_finder.find_files(
+            directory=files_or_dir,
+            keywords=keywords,
+            extensions=["results.csv"],
+            verbose=True,
+        )
+        files_or_dir = file_finder.files
+    results = []
+    for file in files_or_dir:
+        df = pd.read_csv(file, index_col=[0], header=[0])
+        data = pd.melt(df, id_vars=["channel_name"], value_vars=[scoring_key])
+        accuracies = []
+        for ch_name in data["channel_name"].unique():
+            accuracies.append(
+                [
+                    "LFP" if "LFP" in ch_name else "ECOG",
+                    data[data.channel_name == ch_name]
+                    .mean(numeric_only=True)
+                    .value,
+                ]
+            )
+        df_acc = pd.DataFrame(accuracies, columns=["Channels", scoring_key])
+        df_lfp = df_acc[df_acc["Channels"] == "LFP"]
+        df_ecog = df_acc[df_acc["Channels"] == "ECOG"]
+        subject = mne_bids.get_entities_from_fname(file, on_error="ignore")[
+            "subject"
+        ]
+        values = [
+            file,
+            subject,
+            "OFF" if "MedOff" in file else "ON",
+            "OFF" if "StimOff" in file else "ON",
+            df["trials_used"].iloc[0],
+            df["trials_discarded"].iloc[0],
+        ]
+        results.extend(
+            [
+                values + ["LFP", df_lfp[scoring_key].max()],
+                values + ["ECOG", df_ecog[scoring_key].max()],
+            ]
+        )
+    columns = [
+        "filename",
+        "subject",
+        "medication",
+        "stimulation",
+        "trials_used",
+        "trials_discarded",
+        "channels",
+        scoring_key,
+    ]
+    df_raw = pd.DataFrame(results, columns=columns)
+
+    # Average raw results
+    results_average = []
+    for ch_name in df_raw["channels"].unique():
+        df_ch = df_raw.loc[df_raw["channels"] == ch_name]
+        for subject in df_ch["subject"].unique():
+            df_subj = df_ch.loc[df_ch["subject"] == subject]
+            series_single = pd.Series(
+                df_subj.iloc[0].values, index=df_subj.columns
+            ).drop("filename")
+            series_single[scoring_key] = df_subj[scoring_key].mean()
+            results_average.append(series_single)
+    df_average = pd.DataFrame(results_average)
+
+    # Rename columns
+    df_average = df_average.rename(
+        columns={
+            col: " ".join([substr.capitalize() for substr in col.split("_")])
+            for col in df_average.columns
+        }
+    )
+    return df_average, df_raw
+
+
 def load_predictions_timelocked(
-    fpath_or_dir: Union[str, list, Path],
+    files_or_dir: Union[str, list, Path],
     sfreq: Optional[Union[int, float]] = None,
     baseline: Union[bool, tuple] = None,
     channels: Iterable = ("ECOG", "LFP"),
@@ -17,15 +103,15 @@ def load_predictions_timelocked(
     key_average: Optional[str] = None,
 ):
     """Load data from time-locked predictions."""
-    if not isinstance(fpath_or_dir, list):
+    if not isinstance(files_or_dir, list):
         file_finder = pte.get_filefinder(datatype="any")
         file_finder.find_files(
-            directory=fpath_or_dir,
+            directory=files_or_dir,
             keywords=keywords,
             extensions=["predictions_timelocked.json"],
             verbose=True,
         )
-        fpath_or_dir = file_finder.files
+        files_or_dir = file_finder.files
     if baseline:
         if any(baseline) and not sfreq:
             raise ValueError(
@@ -43,7 +129,7 @@ def load_predictions_timelocked(
             base_end = int(baseline[1] * sfreq)
 
     data = {ch_name: {} for ch_name in channels}
-    for key, fpath in enumerate(fpath_or_dir):
+    for key, fpath in enumerate(files_or_dir):
         if key_average:
             key = mne_bids.get_entities_from_fname(fpath, on_error="ignore")[
                 key_average
