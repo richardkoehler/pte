@@ -1,6 +1,6 @@
 """Module for processing of EMG channels."""
 
-from typing import Union
+from typing import Iterable, Union
 from numba import jit
 import numpy as np
 
@@ -8,14 +8,13 @@ import mne
 
 
 def get_emg_rms(
-    raw,
-    emg_ch,
-    window_len,
-    analog_ch,
-    scaling=1e0,
-    rereference=False,
-    notch_filter=50,
-):
+    raw: mne.io.Raw,
+    emg_ch: Union[str, list[str], np.ndarray],
+    window_len: Union[float, int, Iterable],
+    analog_ch: Union[list, str],
+    rereference: bool = False,
+    notch_filter: Union[float, int] = 50,
+) -> mne.io.Raw:
     """Return root mean square with given window length of raw object.
     
     Parameters
@@ -39,25 +38,31 @@ def get_emg_rms(
         channel.
     """
 
-    raw_emg = raw.copy().pick(picks=emg_ch).load_data()
+    raw_emg = raw.copy().pick(picks=emg_ch).load_data(verbose=False)
     raw_emg.set_channel_types(
         mapping={name: "eeg" for name in raw_emg.ch_names}
     )
     if rereference:
         raw_emg = mne.set_bipolar_reference(
-            raw_emg,
+            inst=raw_emg,
             anode=raw_emg.ch_names[0],
             cathode=raw_emg.ch_names[1],
             ch_name=["EMG_BIP"],
             drop_refs=True,
             copy=False,
+            verbose=False,
         )
-    data_bip = raw_emg.get_data()[0]
+    raw_emg.set_channel_types(
+        mapping={name: "emg" for name in raw_emg.ch_names}
+    )
+    data_bip = raw_emg.get_data(verbose=False)[0]
     if notch_filter:
         assert isinstance(notch_filter, (int, float))
-        freqs = np.arange(notch_filter, 500, notch_filter)
-        raw_emg = raw_emg.notch_filter(freqs, verbose=None)
-    raw_filt = raw_emg.filter(l_freq=15, h_freq=500, verbose=False)
+        freqs = np.arange(notch_filter, raw.info["sfreq"] / 2, notch_filter)
+        raw_emg = raw_emg.notch_filter(freqs=freqs, picks="emg", verbose=False)
+    raw_filt = raw_emg.filter(
+        l_freq=15, h_freq=500, picks="all", verbose=False
+    )
     if isinstance(window_len, (int, float)):
         window_len = [window_len]
     data = raw_filt.get_data()[0]
@@ -65,7 +70,7 @@ def get_emg_rms(
     for idx, window in enumerate(window_len):
         data_rms = _rms_window_nb(data, window, raw.info["sfreq"])
         data_rms_zx = (data_rms - np.mean(data_rms)) / np.std(data_rms)
-        data_arr[idx, :] = data_rms_zx * scaling
+        data_arr[idx, :] = data_rms_zx
     data_analog = raw.copy().pick(picks=analog_ch).get_data()[0]
     if np.abs(min(data_analog)) > max(data_analog):
         data_analog = data_analog * -1
@@ -76,7 +81,7 @@ def get_emg_rms(
         ch_types="emg",
         sfreq=raw.info["sfreq"],
     )
-    raw_rms = mne.io.RawArray(data_all, info_rms)
+    raw_rms = mne.io.RawArray(data=data_all, info=info_rms, verbose=False)
     raw_rms.info["meas_date"] = raw.info["meas_date"]
     raw_rms.info["line_freq"] = raw.info["line_freq"]
     raw_rms.set_annotations(raw.annotations)
@@ -87,7 +92,7 @@ def get_emg_rms(
 @jit(nopython=True)
 def _rms_window_nb(
     data: np.ndarray, window_len: Union[float, int], sfreq: Union[float, int]
-):
+) -> np.ndarray:
     """Return root mean square of input signal with given window length.
     
     Parameters

@@ -1,11 +1,81 @@
 """Module for cluster-based statistics."""
+from typing import Iterable, Optional
 
 import numpy as np
 from numba import njit
 
+import pte
+
+
+def clusters_from_pvals(
+    p_vals: np.ndarray,
+    alpha: float,
+    correction_method: str,
+    n_perm: Optional[int],
+) -> tuple[np.ndarray, int]:
+    """Return significant clusters."""
+    if np.where(p_vals <= alpha)[0].size > 1:
+        signif = pte.stats.correct_pvals(
+            p_vals=p_vals,
+            alpha=alpha,
+            correction_method=correction_method,
+            n_perm=n_perm,
+        )
+        if signif.size > 1:
+            clusters_raw = np.array(
+                [1 if i in signif else 0 for i in range(len(p_vals))]
+            )
+            clusters, cluster_count = get_clusters(
+                data=clusters_raw, min_cluster_size=1
+            )
+            return (clusters, cluster_count)
+    return (np.ndarray([]), 0)
+
+
+def get_clusters(data: Iterable, min_cluster_size: int = 1):
+    """Cluster 1-D array of boolean values.
+
+    Parameters
+    ----------
+    iterable : array-like of bool
+        Array to be clustered.
+    min_cluster_size : integer
+        Minimum size of clusters to consider. Must be at least 1.
+
+    Returns
+    -------
+    cluster_labels : np.array
+        Array of shape (len(iterable), 1), where each value indicates the
+        number of the cluster. Values are 0 if the item does not belong to
+        a cluster
+    cluster_count : int
+        Number of detected cluster. Corresponds to the highest value in
+        cluster_labels
+    """
+    if min_cluster_size < 1:
+        min_cluster_size = 1
+    cluster_labels = np.zeros_like(data, dtype=int)
+    cluster_count = 0
+    cluster_len = 0
+    for idx, item in enumerate(data):
+        if item:
+            cluster_len += 1
+            cluster_labels[idx] = cluster_count + 1
+        else:
+            if cluster_len < min_cluster_size:
+                cluster_labels[max(0, idx - cluster_len) : idx] = 0
+            else:
+                cluster_count += 1
+            cluster_len = 0
+    if cluster_len >= min_cluster_size:
+        cluster_count += 1
+    else:
+        cluster_labels[min(-1, cluster_len) :] = 0
+    return cluster_labels, cluster_count
+
 
 @njit
-def clusterwise_pval_numba(p_arr, p_sig, n_perm):
+def clusterwise_pval_numba(p_arr, p_sig, n_perm, mode="all"):
     """Calculate significant clusters and their corresponding p-values.
 
     Based on:
@@ -108,6 +178,8 @@ def clusterwise_pval_numba(p_arr, p_sig, n_perm):
     clusters = []
     # Initialize empty list with specific data type for numba to work
     p_vals = [np.float64(x) for x in range(0)]
+    if mode == "max":
+        max_cluster_sum = 0
     # Cluster labels start at 1
     for cluster_i in range(num_clusters):
         index_cluster = np.where(labels == cluster_i + 1)[0]
@@ -116,5 +188,10 @@ def clusterwise_pval_numba(p_arr, p_sig, n_perm):
         if p_val <= p_sig:
             clusters.append(index_cluster)
             p_vals.append(p_val)
-
+        if mode == "max":
+            if max_cluster_sum == 0 or p_cluster_sum > max_cluster_sum:
+                clusters.clear()
+                clusters.append(index_cluster)
+                p_vals = [p_val]
+                max_cluster_sum = p_cluster_sum
     return p_vals, clusters

@@ -1,9 +1,9 @@
-"""Define abstract base classes to construct FileReader classes."""
+"""Define abstract base classes to construct FileFinder classes."""
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import os
-from typing import List, Optional
+from typing import List, Optional, Union
 
 import mne_bids
 
@@ -11,7 +11,7 @@ from .. import settings
 
 
 @dataclass
-class FileReader(ABC):
+class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
     directory: str = field(init=False)
@@ -38,16 +38,17 @@ class FileReader(ABC):
         exclude: str = None,
         verbose: bool = True,
     ) -> None:
-        """Filter filepaths for given parameters."""
+        """Filter list of filepaths for given parameters."""
 
     @staticmethod
-    def _keyword_search(files, keywords):
+    def _keyword_search(files: list, keywords: Union[str, list]) -> list:
         if not keywords:
             return files
-        filtered_files = []
-        for file in files:
-            if any([kword.lower() in file.lower() for kword in keywords]):
-                filtered_files.append(file)
+        if not isinstance(keywords, list):
+            keywords = [keywords]
+        filtered_files = [
+            file for file in files if any([key in file for key in keywords])
+        ]
         return filtered_files
 
     def _print_files(self, files) -> None:
@@ -74,17 +75,14 @@ class FileReader(ABC):
             extensions (list): e.g. [".json" or "tsv"] (optional)
             verbose (bool): verbosity level (optional, default=True)
         """
-        if not os.path.isdir(directory):
-            raise DirectoryNotFoundError(directory)
-        self.directory = directory
 
         files = []
-        for _, _, fnames in os.walk(directory):
+        for root, _, fnames in os.walk(directory):
+            fnames = [os.path.join(root, file) for file in fnames]
             fnames = self._keyword_search(fnames, keywords)
             fnames = self._keyword_search(fnames, extensions)
-            files.extend(fnames)
-        if files:
-            files = [os.path.join(directory, file) for file in files]
+            if fnames:
+                files.extend([file for file in fnames])
 
         if verbose:
             self._print_files(files)
@@ -92,7 +90,6 @@ class FileReader(ABC):
 
     def _filter_files(
         self,
-        files: List[str],
         keywords: Optional[list] = None,
         hemisphere: Optional[str] = None,
         stimulation: Optional[str] = None,
@@ -101,15 +98,24 @@ class FileReader(ABC):
         verbose: bool = True,
     ) -> List[str]:
         """Filter list of filepaths for given parameters and return filtered list."""
-        filtered_files = files
-        if keywords:
-            if isinstance(keywords, str):
-                keywords = [keywords]
+        filtered_files = self.files
+        if exclude:
+            if isinstance(exclude, str):
+                exclude = [exclude]
             filtered_files = [
                 file
                 for file in filtered_files
-                if any([key in file for key in keywords])
+                if not any(item in file for item in exclude)
             ]
+        if keywords:
+            if isinstance(keywords, str):
+                keywords = [keywords]
+            filtered_files = self._keyword_search(filtered_files, keywords)
+            # filtered_files = [
+            #   file
+            #  for file in filtered_files
+            # if any([key in file for key in keywords])
+            # ]
         if stimulation:
             if stimulation.lower() in "stimon":
                 stim = "StimOn"
@@ -117,7 +123,7 @@ class FileReader(ABC):
                 stim = "StimOff"
             else:
                 raise ValueError("Keyword for stimulation not valid.")
-            filtered_files = [file for file in filtered_files if stim in file]
+            filtered_files = self._keyword_search(filtered_files, [stim])
         if medication:
             if medication.lower() in "medon":
                 med = "MedOn"
@@ -125,23 +131,22 @@ class FileReader(ABC):
                 med = "MedOff"
             else:
                 raise ValueError("Keyword for medication not valid.")
-            filtered_files = [file for file in filtered_files if med in file]
+            filtered_files = self._keyword_search(filtered_files, [med])
         if hemisphere:
             matching_files = []
             for file in filtered_files:
-                entities = mne_bids.get_entities_from_fname(file)
-                hem = settings.ECOG_HEMISPHERES[entities["subject"]] + "_"
+                subject = mne_bids.get_entities_from_fname(file)["subject"]
+                if subject not in settings.ECOG_HEMISPHERES:
+                    raise HemisphereNotSpecifiedError(
+                        subject, settings.ECOG_HEMISPHERES
+                    )
+                hem = settings.ECOG_HEMISPHERES[subject] + "_"
                 if hemisphere.lower() in "ipsilateral" and hem in file:
                     matching_files.append(file)
                 if hemisphere.lower() in "contralateral" and hem not in file:
                     matching_files.append(file)
             filtered_files = matching_files
-        if exclude:
-            filtered_files = [
-                file
-                for file in filtered_files
-                if not any(item in file for item in exclude)
-            ]
+        self.files = filtered_files
         if verbose:
             self._print_files(filtered_files)
         return filtered_files
@@ -162,4 +167,31 @@ class DirectoryNotFoundError(Exception):
         super().__init__(self.message)
 
     def __str__(self):
-        return f"{{self.message}} Got: {self.directory}."
+        return f"{self.message} Got: {self.directory}."
+
+
+class HemisphereNotSpecifiedError(Exception):
+    """Exception raised when electrode hemisphere is not specified in settings.
+
+    Attributes:
+        subject -- input subject which caused the error
+        hemisphere -- specified hemispheres
+        message -- explanation of the error
+    """
+
+    def __init__(
+        self,
+        subject,
+        hemispheres,
+        message="Input ECOG hemisphere is not specified in `settings.py` for given subject.",
+    ) -> None:
+        self.subject = subject
+        self.hemispheres = hemispheres
+        self.message = message
+        super().__init__(self.message)
+
+    def __str__(self):
+        return (
+            f"{self.message} Specified hemispheres: {self.hemispheres}."
+            f"Unspecified subject: {self.subject}."
+        )

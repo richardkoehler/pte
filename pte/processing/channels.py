@@ -1,10 +1,13 @@
 """Module for processing channels in electrophysiological data."""
 
+from typing import List
 import mne
 import numpy as np
 
 
-def add_squared_channel(raw, event_id, ch_name):
+def add_squared_channel(
+    raw: mne.io.Raw, event_id: dict, ch_name: str
+) -> mne.io.Raw:
     """Create squared data (0s and 1s) from events and add to Raw object.
 
     Parameters
@@ -46,7 +49,7 @@ def add_squared_channel(raw, event_id, ch_name):
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]
     )
     raw_sq = mne.io.RawArray(onoff, info)
-    raw_sq.info["meas_date"] = raw.info["meas_date"]
+    raw_sq.info.set_meas_date(raw.info["meas_date"])
     raw_sq.info["line_freq"] = 50
     raw_final = (
         raw.copy().load_data().add_channels([raw_sq], force_update_info=True)
@@ -54,14 +57,19 @@ def add_squared_channel(raw, event_id, ch_name):
     return raw_final
 
 
-def add_summation_channel(raw, sum_channels, new_ch):
-    """
+def add_summation_channel(
+    raw: mne.io.Raw, summation_channels: List[str], new_channel: str
+) -> mne.io.Raw:
+    """Sum up signals from given channels and add to MNE Raw object.
 
     Parameters
     ----------
-    raw
-    sum_channels
-    new_ch
+    raw: MNE Raw object
+        MNE Raw object containing data.
+    summation_channels: list of str
+        Channel names to be summed up.
+    new_channel: str
+        Channel name of new channel to be added
 
     Returns
     -------
@@ -69,11 +77,14 @@ def add_summation_channel(raw, sum_channels, new_ch):
         The Raw object containing the added channel. Is a copy of the
         original Raw object.
     """
-    data = raw.get_data(picks=sum_channels)
+    data = raw.get_data(picks=summation_channels)
     new_data = np.expand_dims(data.sum(axis=0), axis=0)
-    ch_type = raw.get_channel_types(picks=sum_channels[0])
+    ch_type = raw.get_channel_types(picks=summation_channels[0])
     info = mne.create_info(
-        [new_ch], sfreq=raw.info["sfreq"], ch_types=ch_type, verbose=False
+        ch_names=[new_channel],
+        sfreq=raw.info["sfreq"],
+        ch_types=ch_type,
+        verbose=False,
     )
     raw_new = mne.io.RawArray(
         new_data, info, first_samp=0, copy="auto", verbose=False
