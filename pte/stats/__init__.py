@@ -1,4 +1,5 @@
 """Package for statistics."""
 
-from .permutation import *
-from .cluster import *
+from .cluster import clusterwise_pval_numba, get_clusters, clusters_from_pvals
+from .permutation import permutation_onesample, permutation_twosample
+from .timeseries import correct_pvals, timeseries_pvals

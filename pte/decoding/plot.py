@@ -12,8 +12,6 @@ from matplotlib import pyplot as plt
 from statannotations.Annotator import Annotator
 from statannotations.stats.StatTest import StatTest
 
-from statsmodels.stats.multitest import fdrcorrection
-
 import pte
 
 
@@ -26,6 +24,7 @@ def boxplot_performance(
     order: Optional[Iterable] = None,
     hue_order: Optional[Iterable] = None,
     stat_test: Optional[str] = "Permutation",
+    alpha: Optional[float] = 0.05,
     add_lines: Optional[str] = None,
     add_median_labels: bool = False,
     title: Optional[str] = "Classification Performance",
@@ -57,8 +56,6 @@ def boxplot_performance(
         hue_order=hue_order,
         data=data,
         palette="viridis",
-        # showmeans=True,
-        meanline=False,
         boxprops=dict(alpha=alpha_box),
         showcaps=True,
         showbox=True,
@@ -120,7 +117,17 @@ def boxplot_performance(
         )
 
     if stat_test:
-        _add_stats(ax, data, x, y, order, hue, hue_order, stat_test=stat_test)
+        _add_stats(
+            ax,
+            data,
+            x,
+            y,
+            order,
+            hue,
+            hue_order,
+            stat_test=stat_test,
+            alpha=alpha,
+        )
 
     plt.tight_layout()
     plt.savefig(outpath, bbox_inches="tight", dpi=450)
@@ -156,6 +163,7 @@ def _add_stats(
     hue: Optional[str],
     hue_order: Optional[Iterable],
     stat_test: str,
+    alpha: float,
 ):
     """Perform statistical test and annotate graph."""
     if not hue:
@@ -171,6 +179,7 @@ def _add_stats(
         stat_test = StatTest(
             func=_permutation_wrapper,
             n_perm=10000,
+            alpha=alpha,
             test_long_name="Permutation Test",
             test_short_name="Perm.",
             stat_name="Effect Size",
@@ -186,7 +195,11 @@ def _add_stats(
         order=order,
     )
     annotator.configure(
-        test=stat_test, text_format="star", loc="inside", color="grey"
+        alpha=alpha,
+        test=stat_test,
+        text_format="simple",
+        loc="inside",
+        color="grey",
     )
     annotator.apply_and_annotate()
 
@@ -197,7 +210,7 @@ def lineplot_prediction(
     subpl_titles: Iterable,
     sfreq: Union[int, float],
     x_lims: tuple,
-    fpath: Optional[Union[Path, str]] = None,
+    outpath: Optional[Union[Path, str]] = None,
     title: Optional[str] = None,
     subtitle: Optional[str] = None,
     label: str = "Distance from Hyperplane",
@@ -259,7 +272,9 @@ def lineplot_prediction(
         )
         axs[2].set_xlabel("Time [s]")
 
-        p_vals = _get_p_vals(x=x, y=y, n_perm=n_perm, two_tailed=two_tailed)
+        p_vals = pte.stats.timeseries_pvals(
+            x=x, y=y, n_perm=n_perm, two_tailed=two_tailed
+        )
 
         _pval_correction_lineplot(
             ax=axs[2],
@@ -267,7 +282,7 @@ def lineplot_prediction(
             y=y,
             x_lims=x_lims,
             p_vals=p_vals,
-            p_lim=p_lim,
+            alpha=p_lim,
             n_perm=n_perm,
             correction_method=correction_method,
         )
@@ -294,8 +309,8 @@ def lineplot_prediction(
         )
     fig.suptitle(title, fontsize="large", y=1.01)
     fig.tight_layout()
-    if fpath:
-        fig.savefig(os.path.normpath(fpath), bbox_inches="tight", dpi=300)
+    if outpath:
+        fig.savefig(os.path.normpath(outpath), bbox_inches="tight", dpi=300)
     plt.show(block=True)
 
 
@@ -350,7 +365,7 @@ def _pval_correction_lineplot(
     y: np.ndarray,
     x_lims: tuple,
     p_vals: Iterable,
-    p_lim: float,
+    alpha: float,
     correction_method: str,
     n_perm: Optional[int] = None,
 ) -> None:
@@ -359,37 +374,32 @@ def _pval_correction_lineplot(
     if y.ndim == 1:
         y = np.expand_dims(y, axis=1)
 
-    signif = np.where(p_vals <= p_lim)[0]
-    if signif.size > 0:
-        if correction_method == "cluster":
-            _, signif = pte.stats.clusterwise_pval_numba(
-                p_arr=p_vals, p_sig=p_lim, n_perm=n_perm
-            )
-        elif correction_method == "fdr":
-            rejected, _ = fdrcorrection(
-                pvals=p_vals, alpha=p_lim, method="poscorr", is_sorted=False
-            )
-            signif = [np.where(rejected)[0]]
-        else:
-            raise ValueError(
-                f"`correction_method` must be one of either `cluster` or `fdr`. \
-                Got:{correction_method}."
-            )
-        if signif:
-            x_labels = np.linspace(x_lims[0], x_lims[1], len(x)).round(2)
-            label = f"p-value <= {p_lim}"
-            for sig in signif:
-                lims = np.arange(sig[0], sig[-1] + 1)
-                y_lims = y.mean(axis=1)[lims]
+    clusters, cluster_count = pte.stats.clusters_from_pvals(
+        p_vals=p_vals,
+        alpha=alpha,
+        correction_method=correction_method,
+        n_perm=n_perm,
+    )
+
+    if cluster_count > 0:
+        label = f"p-value <= {alpha}"
+        x_labels = np.linspace(x_lims[0], x_lims[1], len(p_vals)).round(2)
+        for cluster_idx in range(1, cluster_count + 1):
+            index = np.where(clusters == cluster_idx)[0]
+            # time_point = x_labels[index]
+            lims = np.arange(index[0], index[-1] + 1)
+            y_lims = y.mean(axis=1)[lims]
+            if y_lims.size > 0:
                 ax.fill_between(
-                    lims,
-                    x.mean(axis=1)[lims],
-                    y_lims,
+                    x=lims,
+                    y1=x.mean(axis=1)[lims],
+                    y2=y_lims,
                     alpha=0.5,
                     color=viridis(7),
                     label=label,
                 )
                 label = None  # Avoid printing label multiple times
+                # label_lims = lims[where]
                 for i in [0, -1]:
                     ax.annotate(
                         str(x_labels[lims[i]]) + "s",
@@ -416,12 +426,11 @@ def _single_lineplot(
     correction_method: str,
 ) -> None:
     """Plot prediction line for single model."""
-    threshold_value, threshold_arr = _transform_threshold(
+    (
+        threshold_value,
+        threshold_arr,
+    ) = pte.decoding.timepoint.transform_threshold(
         threshold=threshold, sfreq=sfreq, data=data
-    )
-
-    p_vals = _get_p_vals(
-        x=data, y=threshold_value, n_perm=n_perm, two_tailed=False
     )
 
     ax.plot(data.mean(axis=1), color=color, label=label)
@@ -441,52 +450,22 @@ def _single_lineplot(
         label=None,
     )
 
+    p_vals = pte.stats.timeseries_pvals(
+        x=data, y=threshold_value, n_perm=n_perm, two_tailed=False
+    )
+
     _pval_correction_lineplot(
         ax=ax,
         x=data,
         y=threshold_arr,
         x_lims=x_lims,
         p_vals=p_vals,
-        p_lim=p_lim,
+        alpha=p_lim,
         n_perm=n_perm,
         correction_method=correction_method,
     )
 
     ax.set_title(subpl_title, fontsize="medium")
-
-
-def _get_p_vals(
-    x: Iterable, y: Union[Iterable, int, float], n_perm: int, two_tailed: bool
-):
-    """Calculate sample-wise p-values."""
-    p_vals = np.empty(len(x))
-    if isinstance(y, (int, float)):
-        for t_p, pred in enumerate(x):
-            _, p_vals[t_p] = pte.stats.permutation_onesample(
-                x=pred, y=y, n_perm=n_perm, two_tailed=two_tailed
-            )
-    else:
-        for i, (x_, y_) in enumerate(zip(x, y)):
-            _, p_vals[i] = pte.stats.permutation_twosample(
-                x=x_, y=y_, n_perm=n_perm, two_tailed=two_tailed
-            )
-    return p_vals
-
-
-def _transform_threshold(
-    threshold: Union[Iterable, int, float],
-    sfreq: Union[int, float],
-    data: np.ndarray,
-):
-    """Take threshold input and return threshold value and array."""
-    if isinstance(threshold, (int, float)):
-        threshold_value = threshold
-    else:
-        threshold_value = np.mean(
-            data[int(threshold[0] * sfreq) : int(threshold[1] * sfreq)]
-        )
-    threshold_arr = np.ones_like(data[:, 0]) * threshold_value
-    return threshold_value, threshold_arr
 
 
 def _add_median_labels(ax: axes.Axes) -> None:
