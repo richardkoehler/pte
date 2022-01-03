@@ -2,10 +2,11 @@
 
 import os
 import shutil
-from typing import List
+from typing import List, Optional
 
 import mne
 import mne_bids
+from mne_bids.path import get_bids_path_from_fname
 import numpy as np
 import pandas as pd
 import pybv
@@ -220,7 +221,11 @@ def rewrite_bids_file(
     for elec_file in elec_files:
         df_chs = pd.read_csv(elec_file, sep="\t", index_col=0)
         old_chs = df_chs.index.tolist()
-        add_chs = [ch for ch in raw.ch_names if ch not in old_chs]
+        add_chs = [
+            ch
+            for ch, ch_type in zip(raw.ch_names, raw.get_channel_types())
+            if all((ch not in old_chs, ch_type in ["ecog", "dbs", "seeg"]))
+        ]
         add_list = []
         for _ in add_chs:
             add_dict = {}
@@ -229,7 +234,6 @@ def rewrite_bids_file(
         index = pd.Index(add_chs, name="name")
         df_add = pd.DataFrame(add_list, index=index)
         df_chs = df_chs.append(df_add, ignore_index=False)
-        os.remove(elec_file)
         df_chs.to_csv(
             os.path.join(elec_file), sep="\t", na_rep="n/a", index=True
         )
@@ -258,9 +262,9 @@ def _rewrite_events(
     shutil.copyfile(original_path, target_path)
 
 
-def get_bids_coords(
-    fname: str, root: str, space: str = "MNI152NLin2009bAsym"
-) -> pd.DataFrame:
+def get_bids_electrodes(
+    fname: str, root: Optional[str] = None, space: str = "MNI152NLin2009bAsym"
+) -> tuple[pd.DataFrame, mne_bids.BIDSPath]:
     """Read *electrodes.tsv file and return as pandas DataFrame.
     
     Arguments
@@ -274,17 +278,18 @@ def get_bids_coords(
     Returns
     -------
     pd.DataFrame
+    mne_bids.BIDSPath
 
     """
-    entities = mne_bids.get_entities_from_fname(os.path.basename(fname))
-    entities["suffix"] = "electrodes"
-    elec_path = mne_bids.BIDSPath(**entities, datatype="ieeg")
+    elec_path = get_bids_path_from_fname(fname)
     elec_path.update(
-        root=root,
-        task=None,
-        acquisition=None,
-        run=None,
+        suffix="electrodes",
         extension=".tsv",
         space=space,
+        run=None,
+        task=None,
+        acquisition=None,
     )
-    return pd.read_csv(elec_path.fpath, sep="\t", index_col=0)
+    if root:
+        elec_path.update(root=root)
+    return pd.read_csv(elec_path.fpath, sep="\t", index_col=0), elec_path

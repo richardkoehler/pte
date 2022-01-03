@@ -5,7 +5,7 @@ from .filetools import (
     get_filefinder,
     loadmat,
     rewrite_bids_file,
-    get_bids_coords,
+    get_bids_electrodes,
 )
 from .plotting import raw_plotly, sig_plotly
 
