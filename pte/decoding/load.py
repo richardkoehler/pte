@@ -10,6 +10,55 @@ import pandas as pd
 import pte
 
 
+def load_results_singlechannel(
+    files_or_dir: Union[str, list, Path],
+    keywords: Optional[Union[str, list]] = None,
+    scoring_key: str = "balanced_accuracy",
+    average_runs: bool = False,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load prediciton results from *results.csv"""
+    # Create Dataframes from Files
+    if not isinstance(files_or_dir, list):
+        file_finder = pte.get_filefinder(datatype="any")
+        file_finder.find_files(
+            directory=files_or_dir,
+            keywords=keywords,
+            extensions=["results.csv"],
+            verbose=True,
+        )
+        files_or_dir = file_finder.files
+    results = []
+    for file in files_or_dir:
+        subject = mne_bids.get_entities_from_fname(file, on_error="ignore")[
+            "subject"
+        ]
+        data: pd.DataFrame = pd.read_csv(
+            file,
+            index_col="channel_name",
+            header=0,
+            usecols=["channel_name", scoring_key],
+        )
+        for ch_name in data.index.unique():
+            score = data.loc[ch_name].mean(numeric_only=True).values[0]
+            results.append([subject, ch_name, score])
+    columns = [
+        "Subject",
+        "Channel Name",
+        scoring_key,
+    ]
+    data_out = pd.DataFrame(results, columns=columns)
+    if average_runs:
+        data_out = data_out.set_index(
+            keys=["Subject", "Channel Name"]
+        ).sort_index()
+        results_average = []
+        for ind in data_out.index.unique():
+            result_av = data_out.loc[ind].mean(numeric_only=True).values[0]
+            results_average.append([*ind, result_av])
+        data_out = pd.DataFrame(results_average, columns=columns)
+    return data_out
+
+
 def load_results(
     files_or_dir: Union[str, list, Path],
     keywords: Optional[Union[str, list]] = None,
@@ -28,8 +77,10 @@ def load_results(
         files_or_dir = file_finder.files
     results = []
     for file in files_or_dir:
-        df = pd.read_csv(file, index_col=[0], header=[0])
-        data = pd.melt(df, id_vars=["channel_name"], value_vars=[scoring_key])
+        data_raw = pd.read_csv(file, index_col=[0], header=[0])
+        data = pd.melt(
+            data_raw, id_vars=["channel_name"], value_vars=[scoring_key]
+        )
         accuracies = []
         for ch_name in data["channel_name"].unique():
             accuracies.append(
@@ -51,8 +102,8 @@ def load_results(
             subject,
             "OFF" if "MedOff" in file else "ON",
             "OFF" if "StimOff" in file else "ON",
-            df["trials_used"].iloc[0],
-            df["trials_discarded"].iloc[0],
+            data_raw["trials_used"].iloc[0],
+            data_raw["trials_discarded"].iloc[0],
         ]
         results.extend(
             [
@@ -147,7 +198,7 @@ def load_predictions_timelocked(
     return data_outer
 
 
-def load_predictions_subject(
+def load_predictions(
     files_or_dir: Union[str, list, Path],
     sfreq: Optional[Union[int, float]] = None,
     baseline: Union[bool, tuple] = None,
@@ -174,7 +225,7 @@ def load_predictions_subject(
 
     df_list = []
     for fpath in files_or_dir:
-        df_single = _load_predictions(
+        df_single = _load_predictions_single(
             fpath=fpath,
             baseline=baseline,
             baseline_mode=baseline_mode,
@@ -201,17 +252,17 @@ def load_predictions_subject(
 def _concatenate_runs(data: pd.DataFrame):
     """Concatenate predictions from different runs in a single patient."""
     data_list = []
-    for ch_name in data["Channel Name"].unique():
-        dat_ch = data[data["Channel Name"] == ch_name]
-        for sub in dat_ch["Subject"].unique():
+    for subject in data["Subject"].unique():
+        dat_sub = data[data["Subject"] == subject]
+        for ch_name in dat_sub["Channel Name"].unique():
             dat_concat = np.vstack(
-                dat_ch["Data"][dat_ch["Subject"] == sub].values
+                dat_sub["Data"][dat_sub["Channel Name"] == ch_name].values
             )
-            data_list.append([sub, ch_name, dat_concat])
+            data_list.append([subject, ch_name, dat_concat])
     return pd.DataFrame(data_list, columns=["Subject", "Channel Name", "Data"])
 
 
-def _load_predictions(
+def _load_predictions_single(
     fpath: Union[str, Path],
     baseline: Union[bool, tuple],
     baseline_mode: str,

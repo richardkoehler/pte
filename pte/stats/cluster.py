@@ -6,7 +6,6 @@ from numba import njit
 
 import pte
 
-
 def clusters_from_pvals(
     p_vals: np.ndarray,
     alpha: float,
@@ -52,8 +51,7 @@ def get_clusters(data: Iterable, min_cluster_size: int = 1):
         Number of detected cluster. Corresponds to the highest value in
         cluster_labels
     """
-    if min_cluster_size < 1:
-        min_cluster_size = 1
+    min_cluster_size = max(min_cluster_size, 1)
     cluster_labels = np.zeros_like(data, dtype=int)
     cluster_count = 0
     cluster_len = 0

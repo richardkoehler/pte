@@ -1,6 +1,6 @@
 """Module for plotting decoding results."""
-from itertools import combinations, product
 import os
+from itertools import combinations, product
 from pathlib import Path
 from typing import Callable, Iterable, Optional, Union
 
@@ -15,7 +15,7 @@ from statannotations.stats.StatTest import StatTest
 import pte
 
 
-def boxplot_performance(
+def boxplot_results(
     data: pd.DataFrame,
     outpath: Union[str, Path],
     x: str,
@@ -23,7 +23,7 @@ def boxplot_performance(
     hue: Optional[str] = None,
     order: Optional[Iterable] = None,
     hue_order: Optional[Iterable] = None,
-    stat_test: Optional[str] = "Permutation",
+    stat_test: Optional[Union[Callable, str]] = "Permutation",
     alpha: Optional[float] = 0.05,
     add_lines: Optional[str] = None,
     add_median_labels: bool = False,
@@ -44,7 +44,7 @@ def boxplot_performance(
 
     if figsize == "auto":
         hue_factor = 1 if not hue else len(hue_order)
-        figsize = (1 * len(order) * hue_factor, 4)
+        figsize = (1.1 * len(order) * hue_factor, 4)
 
     plt.figure(figsize=figsize)
 
@@ -150,8 +150,9 @@ def _add_lines(
         [[i, n] for i, n in enumerate(group)]
         for _, group in data.groupby([add_lines], sort=False)[y]
     )
-    lc = collections.LineCollection(lines, colors="grey", linewidths=1)
-    ax.add_collection(lc)
+    ax.add_collection(
+        collections.LineCollection(lines, colors="grey", linewidths=1)
+    )
 
 
 def _add_stats(
