@@ -32,7 +32,7 @@ class Results:
         self._init_features()
 
     def _init_features(self) -> None:
-        """Initialize feautres dictionary."""
+        """Initialize features dictionary."""
 
         self.features = self._init_epoch_dict(
             self.ch_names, self.use_channels, self.target_name
@@ -94,7 +94,7 @@ class Results:
         score: Union[int, float],
         feature_importances: Iterable,
         feature_names: list[str],
-        events_used: Iterable,
+        events_used: np.ndarray,
     ) -> None:
         """Update results."""
         if len(events_used) == 1:
@@ -114,8 +114,8 @@ class Results:
         self,
         path: str,
         scoring: str,
-        events: Iterable,
-        events_used: Iterable,
+        events: Union[np.ndarray, list],
+        events_used: Union[np.ndarray, list],
         events_discarded: Iterable,
     ) -> None:
         """Save results to given path."""
@@ -153,7 +153,7 @@ class Results:
             json.dump(self.features, file)
 
     def update_predictions(
-        self, predictions_data: np.ndarray, ch_pick: str, ch_type: str
+        self, predictions_data: list, ch_pick: str, ch_type: str
     ) -> None:
         """Update predictions."""
         self.predictions = self._append_predictions(
@@ -179,7 +179,7 @@ class Results:
         ch_pick: str,
         ch_type: str,
     ) -> dict:
-        """Append new results to existing results dictionary."""
+        """Append new results to existing results."""
         if new_preds is None:
             return results
         if isinstance(new_preds, np.ndarray):
@@ -335,7 +335,7 @@ class Experiment:
         self.feature_epochs["Label"] = self.labels
         self.feature_epochs.to_csv(path_str + "_features_concatenated.csv",)
 
-    def _update_results_labels(self, events_used: Iterable) -> None:
+    def _update_results_labels(self, events_used: np.ndarray) -> None:
         """Update results with prediction labels"""
         for data, label_name in (
             (self.label.values, "Label"),
@@ -422,7 +422,7 @@ class Experiment:
         self,
         ch_pick: str,
         ch_type: str,
-        events_used: Iterable,
+        events_used: np.ndarray,
         score: Union[float, int],
         feature_importances: list[Union[float, int]],
         cols: list[str],
@@ -543,7 +543,7 @@ class Experiment:
 
     @staticmethod
     def _discard_trial(
-        baseline: int,
+        baseline: Union[int, float],
         data_artifacts: Optional[np.ndarray],
         index_epoch: int,
         bad_epochs: Iterable[int],
@@ -628,8 +628,8 @@ class Experiment:
     @staticmethod
     def _get_feat_array_prediction(
         data: np.ndarray,
-        events: Iterable,
-        events_used: Iterable,
+        events: Union[list, np.ndarray],
+        events_used: np.ndarray,
         sfreq: Union[int, float],
         begin: Union[int, float],
         end: Union[int, float],
@@ -663,7 +663,7 @@ class Experiment:
         dist_onset: int,
         dist_end: int,
         artifacts: Optional[np.ndarray],
-    ) -> int:
+    ) -> Union[int, float]:
         """"""
         ind_onset = events[event_ind] - dist_onset
         if event_ind != 0:
@@ -677,7 +677,7 @@ class Experiment:
             if artifacts is not None:
                 data_art = artifacts[ind_end:ind_onset]
                 bool_art = np.flatnonzero(data_art)
-                ind_art = bool_art[-1] if bool_art.size != 0 else 0
+                ind_art = bool_art[-1] if bool_art.size != 0 else 0.
                 baseline = baseline - ind_art
         return baseline
 

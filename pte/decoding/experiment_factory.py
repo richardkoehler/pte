@@ -1,21 +1,18 @@
 """Module for running decoding experiments."""
 import os
 import sys
-from joblib import Parallel, delayed
 from pathlib import Path
+from joblib import Parallel, delayed
 from typing import Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
 
+import pte
 from ..settings import PATH_PYNEUROMODULATION
 
 sys.path.insert(0, PATH_PYNEUROMODULATION)
-
 from py_neuromodulation.nm_analysis import Feature_Reader
-
-from .decode import get_decoder
-from .experiment import Experiment
 
 
 def _run_single_experiment(
@@ -45,7 +42,7 @@ def _run_single_experiment(
     exceptions=None,
     feature_importance=False,
     verbose=True,
-) -> Optional[Experiment]:
+) -> Optional[pte.decoding.Experiment]:
     """Run experiment with single file."""
     if verbose:
         print("Using file: ", feature_file)
@@ -65,7 +62,7 @@ def _run_single_experiment(
         return None
 
     # Handle bad events file
-    bad_events = _get_bad_events(bad_events_path, feature_file)
+    bad_events = pte.filetools.get_bad_events(bad_events_path, feature_file)
 
     # Pick target for plotting predictions
     target_df = _get_target_df(plot_target_channels, features)
@@ -98,7 +95,7 @@ def _run_single_experiment(
 
     side = "right" if "R_" in out_path else "left"
 
-    decoder = get_decoder(
+    decoder = pte.decoding.get_decoder(
         classifier=classifier,
         scoring=scoring,
         balancing=balancing,
@@ -120,7 +117,7 @@ def _run_single_experiment(
         verbose=verbose,
     )
     # Initialize Experiment instance
-    experiment = Experiment(
+    experiment = pte.decoding.Experiment(
         features=features_df,
         target_df=target_df,
         label=label,
@@ -142,7 +139,7 @@ def run_experiment(
     feature_files: Union[Path, str, list[Union[Path, str]]],
     n_jobs: int = 1,
     **kwargs,
-) -> list[Experiment]:
+) -> list[pte.decoding.Experiment]:
     """Run prediction experiment with given number of files."""
     if not feature_files:
         raise ValueError("No feature files specified.")
@@ -178,23 +175,6 @@ def _get_label(
             )
             return pd.Series(label_data, name=label_channel)
     raise ValueError(f"No valid label found. Labels given: {label_channels}.")
-
-
-def _get_bad_events(
-    bad_events_path: Union[Path, str], feature_file: str
-) -> Optional[pd.DataFrame]:
-    """Get DataFrame of bad events from bad events path."""
-    if not bad_events_path:
-        return None
-    bad_events_path = Path(bad_events_path)
-    if bad_events_path.is_dir():
-        basename = Path(feature_file).stem
-        bad_events_path = bad_events_path / (basename + "_bad_epochs.csv")
-    if not bad_events_path.exists():
-        print(f"No bad epochs file found for: {str(feature_file)}")
-        return None
-    bad_events = pd.read_csv(bad_events_path, index_col=0).event_id.values
-    return bad_events
 
 
 def _handle_exception_files(
