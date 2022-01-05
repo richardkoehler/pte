@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 
 import pte
+from .experiment import Experiment
+from .decode import get_decoder
 from ..settings import PATH_PYNEUROMODULATION
 
 sys.path.insert(0, PATH_PYNEUROMODULATION)
@@ -42,7 +44,7 @@ def _run_single_experiment(
     exceptions=None,
     feature_importance=False,
     verbose=True,
-) -> Optional[pte.decoding.Experiment]:
+) -> Optional[Experiment]:
     """Run experiment with single file."""
     if verbose:
         print("Using file: ", feature_file)
@@ -95,7 +97,7 @@ def _run_single_experiment(
 
     side = "right" if "R_" in out_path else "left"
 
-    decoder = pte.decoding.get_decoder(
+    decoder = get_decoder(
         classifier=classifier,
         scoring=scoring,
         balancing=balancing,
@@ -117,7 +119,7 @@ def _run_single_experiment(
         verbose=verbose,
     )
     # Initialize Experiment instance
-    experiment = pte.decoding.Experiment(
+    experiment = Experiment(
         features=features_df,
         target_df=target_df,
         label=label,
@@ -139,7 +141,7 @@ def run_experiment(
     feature_files: Union[Path, str, list[Union[Path, str]]],
     n_jobs: int = 1,
     **kwargs,
-) -> list[pte.decoding.Experiment]:
+) -> list[Experiment]:
     """Run prediction experiment with given number of files."""
     if not feature_files:
         raise ValueError("No feature files specified.")

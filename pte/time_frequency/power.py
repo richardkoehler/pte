@@ -120,7 +120,7 @@ def power_from_bids(
 
     power = morlet_from_epochs(epochs=epochs, **kwargs_power,)
     if out_dir:
-        fname = Path(out_dir) / (str(Path(file).stem) + "-tfr.h5")
+        fname = Path(out_dir) / (str(Path(file).stem) + "_tfr.h5")
         power.save(fname=fname, verbose=True)
     return power
 
