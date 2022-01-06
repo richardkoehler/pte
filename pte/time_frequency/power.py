@@ -32,6 +32,7 @@ def morlet_from_epochs(
         picks=picks,
         average=average,
         return_itc=False,
+        verbose=True,
         **kwargs,
     )
     return power
@@ -39,45 +40,99 @@ def morlet_from_epochs(
 
 def epochs_from_raw(
     raw: mne.io.BaseRaw,
-    event_picks: Optional[list[str]],
     tmin: Union[int, float] = -6,
     tmax: Union[int, float] = 6,
     baseline: Optional[tuple] = None,
+    events_trial_onset: Optional[
+        Union[str, list[str], list[tuple[str, str]]]
+    ] = None,
+    events_trial_end: Optional[
+        Union[str, list[str], list[tuple[str, str]]]
+    ] = None,
+    min_distance_trials: Union[int, float] = 0,
     **kwargs,
 ) -> mne.Epochs:
     """Return epochs from given events."""
-    events = None
-    for event_pick in event_picks:
-        try:
-            events, event_id = mne.events_from_annotations(
-                raw=raw, event_id={event_pick: 1}, verbose=True,
-            )
-            break
-        except ValueError:
-            pass
-    if events is None:
-        _, event_id = mne.events_from_annotations(raw=raw, verbose=False,)
-        raise ValueError(
-            f"None of the given `event_picks´ found: {event_picks}."
-            f"Possible events: {*event_id.keys(),}"
-        )
-    print(event_id)
+    events, _ = get_events(raw=raw, event_picks=events_trial_onset)
     epochs = mne.Epochs(
         raw=raw,
         events=events,
         tmin=tmin,
         tmax=tmax,
         baseline=baseline,
+        verbose=True,
         **kwargs,
     )
+    if min_distance_trials:
+        events_end = None
+        if events_trial_end:
+            events_end, _ = get_events(raw, event_picks=events_trial_end)
+        epochs = discard_epochs(
+            epochs=epochs,
+            events_begin=events,
+            events_end=events_end,
+            min_distance_events=min_distance_trials,
+        )
+    return epochs
+
+
+def get_events(
+    raw: mne.io.Raw, event_picks: Union[str, list[str], list[tuple[str, str]]]
+) -> tuple[np.ndarray, dict]:
+    """Get events from given Raw instance and event id."""
+    if isinstance(event_picks, str):
+        event_picks = [event_picks]
+    events = None
+    for event_pick in event_picks:
+        if isinstance(event_pick, str):
+            event_id = {event_pick: 1}
+        else:
+            event_id = {event_pick[0]: 1, event_pick[1]: -1}
+        try:
+            events, event_id = mne.events_from_annotations(
+                raw=raw, event_id=event_id, verbose=True,
+            )
+            break
+        except ValueError:
+            pass
+    if events is None:
+        _, event_id_found = mne.events_from_annotations(
+            raw=raw, verbose=False,
+        )
+        raise ValueError(
+            f"None of the given `event_picks´ found: {event_picks}."
+            f"Possible events: {*event_id_found.keys(),}"
+        )
+    return events, event_id
+
+
+def discard_epochs(
+    epochs: mne.Epochs,
+    events_begin: np.ndarray,
+    min_distance_events: Union[int, float],
+    events_end: Optional[np.ndarray] = None,
+) -> mne.Epochs:
+    """Discard epochs based on minimal distance between event onset and end."""
+    if events_end is not None:
+        events = np.sort(np.hstack((events_begin[:, 0], events_end[:, 0])))
+        event_diffs = np.diff(events)[1::2]
+    else:
+        events = events_begin[:, 0]
+        event_diffs = np.diff(events)
+    drop_indices = np.where(
+        event_diffs <= min_distance_events * epochs.info["sfreq"]
+    )[0]
+    epochs = epochs.drop(indices=drop_indices)
     return epochs
 
 
 def power_from_bids(
     file: mne_bids.BIDSPath,
-    event_picks: Optional[list[str]],
-    out_dir: Optional[Union[Path, str]] = None,
+    events_trial_onset: Optional[list[str]] = None,
+    events_trial_end: Optional[list[str]] = None,
+    min_distance_trials: Union[int, float] = 0,
     bad_events_dir: Optional[Union[Path, str]] = None,
+    out_dir: Optional[Union[Path, str]] = None,
     **kwargs,
 ) -> mne.time_frequency.AverageTFR:
     """Calculate power from single file."""
@@ -94,18 +149,30 @@ def power_from_bids(
             args_preprocess[key] = kwargs[key]
     raw = pte.processing.preprocess(**args_preprocess)
 
-    kwargs_epochs = {"event_picks": event_picks, "baseline": None}
+    args_epochs = {"raw": raw}
     for key in inspect.getfullargspec(mne.Epochs)[0]:
         if key in kwargs:
-            kwargs_epochs[key] = kwargs[key]
-    epochs = epochs_from_raw(raw=raw, **kwargs_epochs)
+            args_epochs[key] = kwargs[key]
+    epochs = epochs_from_raw(
+        **args_epochs,
+        events_trial_onset=events_trial_onset,
+        events_trial_end=events_trial_end,
+        min_distance_trials=min_distance_trials,
+    )
 
     if bad_events_dir:
         bad_events = pte.filetools.get_bad_events(
-            bad_events_path=bad_events_dir, fname=file
+            bad_events_path=bad_events_dir, fname=file,
         )
         if bad_events is not None:
-            epochs = epochs.drop(indices=bad_events)
+            bad_indices = np.array(
+                [
+                    idx
+                    for idx, event in enumerate(epochs.selection)
+                    if event in bad_events
+                ]
+            )
+            epochs = epochs.drop(indices=bad_indices)
 
     if decim_power == "auto":
         decim = int(epochs.info["sfreq"] / 100)
@@ -127,9 +194,10 @@ def power_from_bids(
 
 def power_from_files(
     filenames: list[mne_bids.BIDSPath],
-    event_picks: Optional[list[str]],
+    events_trial_onset: Optional[list[str]],
     out_dir: Optional[Union[Path, str]] = None,
     bad_events_dir: Optional[Union[Path, str]] = None,
+    min_distance_trials: Union[int, float] = 0,
     decim: Union[int, str] = "auto",
     **kwargs,
 ) -> None:
@@ -139,9 +207,10 @@ def power_from_files(
     return [
         power_from_bids(
             file=file,
-            event_picks=event_picks,
+            events_trial_onset=events_trial_onset,
             out_dir=out_dir,
             bad_events_dir=bad_events_dir,
+            min_distance_trials=min_distance_trials,
             decim=decim,
             **kwargs,
         )
