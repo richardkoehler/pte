@@ -13,8 +13,10 @@ dependencies:
   - numba
   - numpy
   - pandas
+  - pip
   - plotly
   - scikit-learn
   - scipy
-  - statannotations
   - xgboost
+  - pip:
+    - statannotations
