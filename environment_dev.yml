@@ -1,13 +1,16 @@
-name: pte
+name: pte-dev
 channels:
   - conda-forge
   - defaults
 dependencies:
   - bayesian-optimization
+  - black
   - catboost
   - imbalanced-learn
   - filterpy
   - joblib
+  - jupyter
+  - jupyterlab
   - matplotlib
   - mne
   - mne-bids
@@ -16,6 +19,8 @@ dependencies:
   - pandas
   - pip
   - plotly
+  - pylint
+  - python>=3.9
   - scikit-learn
   - scipy
   - seaborn
