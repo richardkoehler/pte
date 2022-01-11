@@ -16,7 +16,7 @@ def load_results_singlechannel(
     scoring_key: str = "balanced_accuracy",
     average_runs: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load prediciton results from *results.csv"""
+    """Load results from *results.csv"""
     # Create Dataframes from Files
     if not isinstance(files_or_dir, list):
         file_finder = pte.get_filefinder(datatype="any")
@@ -140,58 +140,6 @@ def load_results(
         }
     )
     return df_average, df_raw
-
-
-def load_predictions_timelocked(
-    files_or_dir: Union[str, list, Path],
-    sfreq: Optional[Union[int, float]] = None,
-    baseline: Union[bool, tuple] = None,
-    baseline_mode: str = "z-score",
-    channels: Iterable = ("ECOG", "LFP"),
-    keywords: Optional[Union[str, list]] = None,
-    key_average: Optional[str] = None,
-):
-    """Load data from time-locked predictions."""
-    if not isinstance(files_or_dir, list):
-        file_finder = pte.get_filefinder(datatype="any")
-        file_finder.find_files(
-            directory=files_or_dir,
-            keywords=keywords,
-            extensions=["predictions_timelocked.json"],
-            verbose=True,
-        )
-        files_or_dir = file_finder.files
-    if baseline:
-        base_start, base_end = _handle_baseline(baseline, sfreq)
-
-    data = {ch_name: {} for ch_name in channels}
-    for key, fpath in enumerate(files_or_dir):
-        if key_average:
-            key = mne_bids.get_entities_from_fname(fpath, on_error="ignore")[
-                key_average
-            ]
-        with open(fpath, "r", encoding="utf-8") as file:
-            preds = json.load(file)
-        for ch_name in channels:
-            if key not in data[ch_name]:
-                data[ch_name][key] = []
-            pred = np.mean(np.stack(preds[ch_name], axis=0), axis=0)
-            if baseline:
-                if baseline_mode == "std":
-                    pred = pred / np.std(pred[base_start:base_end])
-                else:  # baseline_mode == "z-score"
-                    pred = (pred - np.mean(pred[base_start:base_end])) / (
-                        np.std(pred[base_start:base_end])
-                    )
-            data[ch_name][key].append(pred)
-    data_outer = []
-    for _, value in data.items():
-        data_inner = []
-        for _, j in value.items():
-            data_inner.append(np.array(j).mean(axis=0))
-        data_outer.append(data_inner)
-    data_outer = np.array(data_outer)
-    return data_outer
 
 
 def load_predictions(
