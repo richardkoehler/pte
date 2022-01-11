@@ -15,7 +15,33 @@ class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
     directory: str = field(init=False)
-    files: list = field(init=False)
+    files: list = field(init=False, default_factory=list)
+
+    def __str__(self):
+        if not self.files:
+            return "No corresponding files found."
+        headers = ["Index", "Filename"]
+        col_width = max(len(os.path.basename(file)) for file in self.files)
+        format_row = f"{{:>{len(headers[0]) + 2}}}{{:>{col_width + 2}}}"
+        return "\n".join(
+            (
+                "Corresponding files found:",
+                "".join(
+                    f"{{:>{len(header) + 2}}}".format(header)
+                    for header in headers
+                ),
+                "\u2500" * os.get_terminal_size().columns,
+                *(
+                    format_row.format(idx, os.path.basename(file))
+                    for idx, file in enumerate(self.files)
+                ),
+            )
+        )
+
+    def __len__(self) -> int:
+        if not self.files:
+            return 0
+        return len(self.files)
 
     @abstractmethod
     def find_files(
@@ -23,7 +49,7 @@ class FileFinder(ABC):
         directory: str,
         keywords: list = None,
         extensions: list = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
         keywords and extensions."""
@@ -36,7 +62,7 @@ class FileFinder(ABC):
         stimulation: str = None,
         medication: str = None,
         exclude: str = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
 
@@ -47,24 +73,19 @@ class FileFinder(ABC):
         if not isinstance(keywords, list):
             keywords = [keywords]
         filtered_files = [
-            file for file in files if any([key in file for key in keywords])
+            file for file in files if any(key in file for key in keywords)
         ]
         return filtered_files
 
-    def _print_files(self, files) -> None:
-        if not files:
-            print("No corresponding files found.")
-        else:
-            print("Corresponding files found:")
-            for idx, file in enumerate(files):
-                print(idx, ":", os.path.basename(file))
+    def _print_files(self, files: Optional[list]) -> None:
+        print(self)
 
     def _find_files(
         self,
         directory: str,
         keywords: list = None,
         extensions: list = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> List[str]:
         """Find all files in directory with optional
         keywords and extensions.
@@ -95,7 +116,7 @@ class FileFinder(ABC):
         stimulation: Optional[str] = None,
         medication: Optional[str] = None,
         exclude: Optional[str] = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> List[str]:
         """Filter list of filepaths for given parameters and return filtered list."""
         filtered_files = self.files
@@ -111,11 +132,6 @@ class FileFinder(ABC):
             if isinstance(keywords, str):
                 keywords = [keywords]
             filtered_files = self._keyword_search(filtered_files, keywords)
-            # filtered_files = [
-            #   file
-            #  for file in filtered_files
-            # if any([key in file for key in keywords])
-            # ]
         if stimulation:
             if stimulation.lower() in "stimon":
                 stim = "StimOn"
@@ -160,7 +176,9 @@ class DirectoryNotFoundError(Exception):
     """
 
     def __init__(
-        self, directory, message="Input directory was not found.",
+        self,
+        directory,
+        message="Input directory was not found.",
     ):
         self.directory = directory
         self.message = message
