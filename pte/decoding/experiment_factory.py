@@ -1,21 +1,18 @@
 """Module for running decoding experiments."""
 import os
 import sys
-from joblib import Parallel, delayed
 from pathlib import Path
+from joblib import Parallel, delayed
 from typing import Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
 
-from ..settings import PATH_PYNEUROMODULATION
-
-sys.path.insert(0, PATH_PYNEUROMODULATION)
-
-from py_neuromodulation.nm_analysis import Feature_Reader
-
-from .decode import get_decoder
+import pte
 from .experiment import Experiment
+from .decode import get_decoder
+
+from py_neuromodulation import nm_analysis
 
 
 def _run_single_experiment(
@@ -51,11 +48,12 @@ def _run_single_experiment(
         print("Using file: ", feature_file)
 
     # Read features using py_neuromodulation
-    nm_reader = Feature_Reader(
+    nm_reader = nm_analysis.Feature_Reader(
         feature_dir=feature_root, feature_file=feature_file
     )
     features = nm_reader.feature_arr
     settings = nm_reader.settings
+    sidecar = nm_reader.sidecar
 
     # Pick label for classification
     try:
@@ -65,7 +63,7 @@ def _run_single_experiment(
         return None
 
     # Handle bad events file
-    bad_events = _get_bad_events(bad_events_path, feature_file)
+    bad_events = pte.filetools.get_bad_events(bad_events_path, feature_file)
 
     # Pick target for plotting predictions
     target_df = _get_target_df(plot_target_channels, features)
@@ -124,7 +122,7 @@ def _run_single_experiment(
         features=features_df,
         target_df=target_df,
         label=label,
-        ch_names=settings["ch_names"],
+        ch_names=sidecar["ch_names"],
         decoder=decoder,
         side=side,
         artifacts=artifacts,
@@ -151,7 +149,9 @@ def run_experiment(
     if len(feature_files) == 1 or n_jobs in (0, 1):
         return [
             _run_single_experiment(
-                feature_root=feature_root, feature_file=feature_file, **kwargs,
+                feature_root=feature_root,
+                feature_file=feature_file,
+                **kwargs,
             )
             for feature_file in feature_files
         ]
@@ -168,33 +168,18 @@ def run_experiment(
 def _get_label(
     label_channels: list[str],
     features: pd.DataFrame,
-    nm_reader: Feature_Reader,
+    nm_reader: nm_analysis.Feature_Reader,
 ) -> pd.Series:
     """Read label DataFrame from given file."""
     for label_channel in label_channels:
         if label_channel in features.columns:
             label_data = nm_reader.read_target_ch(
-                feature_arr=features, label_name=label_channel, binarize=False,
+                feature_arr=features,
+                label_name=label_channel,
+                binarize=False,
             )
             return pd.Series(label_data, name=label_channel)
     raise ValueError(f"No valid label found. Labels given: {label_channels}.")
-
-
-def _get_bad_events(
-    bad_events_path: Union[Path, str], feature_file: str
-) -> Optional[pd.DataFrame]:
-    """Get DataFrame of bad events from bad events path."""
-    if not bad_events_path:
-        return None
-    bad_events_path = Path(bad_events_path)
-    if bad_events_path.is_dir():
-        basename = Path(feature_file).stem
-        bad_events_path = bad_events_path / (basename + "_bad_epochs.csv")
-    if not bad_events_path.exists():
-        print(f"No bad epochs file found for: {str(feature_file)}")
-        return None
-    bad_events = pd.read_csv(bad_events_path, index_col=0).event_id.values
-    return bad_events
 
 
 def _handle_exception_files(
@@ -205,7 +190,10 @@ def _handle_exception_files(
 ):
     """Check if current file is listed in exception files."""
     if all(
-        (exception_files, any(exc in fullpath for exc in exception_files),)
+        (
+            exception_files,
+            any(exc in fullpath for exc in exception_files),
+        )
     ):
         print("Exception file recognized: ", os.path.basename(fullpath))
         return excep_dist_end

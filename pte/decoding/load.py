@@ -102,8 +102,6 @@ def load_results(
             subject,
             "OFF" if "MedOff" in file else "ON",
             "OFF" if "StimOff" in file else "ON",
-            data_raw["trials_used"].iloc[0],
-            data_raw["trials_discarded"].iloc[0],
         ]
         results.extend(
             [
@@ -116,8 +114,6 @@ def load_results(
         "subject",
         "medication",
         "stimulation",
-        "trials_used",
-        "trials_discarded",
         "channels",
         scoring_key,
     ]

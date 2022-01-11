@@ -18,7 +18,7 @@ class DefaultFinder(FileFinder):
         directory: str,
         keywords: list = None,
         extensions: list = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
         keywords and extensions.
@@ -41,7 +41,7 @@ class DefaultFinder(FileFinder):
         stimulation: str = None,
         medication: str = None,
         exclude: str = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters and return filtered list."""
         self._filter_files(
@@ -65,7 +65,7 @@ class BIDSFinder(FileFinder):
         directory: str,
         keywords: list = None,
         extensions: list = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ):
         """Find files in directory with optional keywords and extensions.
 
@@ -88,7 +88,7 @@ class BIDSFinder(FileFinder):
         stimulation: str = None,
         medication: str = None,
         exclude: str = None,
-        verbose: bool = True,
+        verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
         self.files = [str(file.fpath.resolve()) for file in self.files]

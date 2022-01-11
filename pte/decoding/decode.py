@@ -13,7 +13,7 @@ from sklearn.discriminant_analysis import (
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, log_loss
-from sklearn.model_selection import GroupShuffleSplit
+from sklearn.model_selection import GroupShuffleSplit, GroupKFold
 from sklearn.svm import SVC
 from xgboost import XGBClassifier
 
@@ -147,7 +147,6 @@ class CATB(Decoder):
         )
 
     def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
-        """"""
         self.data_train = data
         self.labels_train = labels
         self.groups_train = groups
@@ -156,7 +155,6 @@ class CATB(Decoder):
             self.model = self._bayesian_optimization()
 
         # Train outer model
-
         (
             self.data_train,
             self.labels_train,
@@ -165,7 +163,7 @@ class CATB(Decoder):
             self.data_train,
             self.labels_train,
             self.groups_train,
-            train_size=0.75,
+            train_size=0.8,
         )
 
         (
@@ -187,7 +185,7 @@ class CATB(Decoder):
 
     def _bayesian_optimization(self):
         """Estimate optimal model parameters using bayesian optimization."""
-        bo = BayesianOptimization(
+        optimizer = BayesianOptimization(
             self._bo_tune,
             {
                 "max_depth": (4, 10),
@@ -197,8 +195,8 @@ class CATB(Decoder):
                 "random_strength": (0.01, 1.0),
             },
         )
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
-        params = bo.max["params"]
+        optimizer.maximize(init_points=10, n_iter=20, acq="ei")
+        params = optimizer.max["params"]
         params["max_depth"] = round(params["max_depth"])
         return CatBoostClassifier(
             iterations=200,
@@ -237,41 +235,36 @@ class CATB(Decoder):
                 self.labels_train[train_index],
                 self.labels_train[test_index],
             )
-            groups_split = self.groups_train[train_index]
-            val_inner_split = GroupShuffleSplit(
-                n_splits=1, train_size=0.75, random_state=41
+            groups_tr = self.groups_train[train_index]
+
+            (X_tr, y_tr, eval_set_inner,) = self._get_validation_split(
+                data=X_tr, labels=y_tr, groups=groups_tr, train_size=0.8,
             )
-            for train_ind, val_ind in val_inner_split.split(
-                X_tr, y_tr, groups_split
-            ):
-                X_tr, X_va = X_tr[train_ind], X_tr[val_ind]
-                y_tr, y_va = y_tr[train_ind], y_tr[val_ind]
-                eval_set_inner = [(X_va, y_va)]
-                X_tr, y_tr, sample_weight = self._balance_samples(
-                    X_tr, y_tr, self.balancing
-                )
-                inner_model = CatBoostClassifier(
-                    iterations=100,
-                    loss_function="MultiClass",
-                    verbose=False,
-                    eval_metric="MultiClass",
-                    max_depth=round(max_depth),
-                    learning_rate=learning_rate,
-                    bagging_temperature=bagging_temperature,
-                    l2_leaf_reg=l2_leaf_reg,
-                    random_strength=random_strength,
-                )
-                inner_model.fit(
-                    X_tr,
-                    y_tr,
-                    eval_set=eval_set_inner,
-                    early_stopping_rounds=25,
-                    sample_weight=sample_weight,
-                    verbose=False,
-                )
-                y_probs = inner_model.predict_proba(X_te)
-                score = log_loss(y_te, y_probs, labels=[0, 1])
-                scores.append(score)
+            X_tr, y_tr, sample_weight = self._balance_samples(
+                X_tr, y_tr, self.balancing
+            )
+            inner_model = CatBoostClassifier(
+                iterations=100,
+                loss_function="MultiClass",
+                verbose=False,
+                eval_metric="MultiClass",
+                max_depth=round(max_depth),
+                learning_rate=learning_rate,
+                bagging_temperature=bagging_temperature,
+                l2_leaf_reg=l2_leaf_reg,
+                random_strength=random_strength,
+            )
+            inner_model.fit(
+                X_tr,
+                y_tr,
+                eval_set=eval_set_inner,
+                early_stopping_rounds=25,
+                sample_weight=sample_weight,
+                verbose=False,
+            )
+            y_probs = inner_model.predict_proba(X_te)
+            score = log_loss(y_te, y_probs, labels=[0, 1])
+            scores.append(score)
         # Return the negative MLOGLOSS
         return -1.0 * np.mean(scores)
 
@@ -327,16 +320,16 @@ class LR(Decoder):
 
     def _bayesian_optimization(self):
         """Estimate optimal model parameters using bayesian optimization."""
-        bo = BayesianOptimization(self._bo_tune, {"C": (0.01, 1.0)})
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
+        optimizer = BayesianOptimization(self._bo_tune, {"C": (0.01, 1.0)})
+        optimizer.maximize(init_points=10, n_iter=20, acq="ei")
         # Train outer model with optimized parameters
-        params = bo.max["params"]
+        params = optimizer.max["params"]
         # params['max_iter'] = int(params['max_iter'])
         return LogisticRegression(
             solver="newton-cg", max_iter=500, C=params["C"]
         )
 
-    def _bo_tune(self, C):
+    def _bo_tune(self, C: float):
         # Cross validating with the specified parameters in 5 folds
         cv_inner = GroupShuffleSplit(
             n_splits=3, train_size=0.66, random_state=42
@@ -419,6 +412,131 @@ class QDA(Decoder):
 class XGB(Decoder):
     """Basic representation of class for finding and filtering files."""
 
+    def _bayesian_optimization(self):
+        """Estimate optimal model parameters using bayesian optimization."""
+        optimizer = BayesianOptimization(
+            self._bo_tune,
+            {
+                "learning_rate": (0.003, 0.3),
+                "max_depth": (4, 10),
+                "gamma": (0, 1),
+                "colsample_bytree": (0.4, 1),
+                "subsample": (0.4, 1),
+            },
+        )
+        optimizer.maximize(init_points=10, n_iter=20, acq="ei")
+        # Train outer model with optimized parameters
+        params = optimizer.max["params"]
+        return XGBClassifier(
+            objective="binary:logistic",
+            use_label_encoder=False,
+            n_estimators=200,
+            eval_metric="logloss",
+            learning_rate=params["learning_rate"],
+            gamma=params["gamma"],
+            max_depth=int(params["max_depth"]),
+            subsample=params["subsample"],
+            colsample_bytree=params["colsample_bytree"],
+        )
+
+    def _bo_tune(
+        self, learning_rate, gamma, max_depth, subsample, colsample_bytree
+    ):
+        cv_inner = GroupKFold(n_splits=3,)
+        scores = []
+
+        for train_index, test_index in cv_inner.split(
+            self.data_train, self.labels_train, self.groups_train
+        ):
+            X_tr, X_te = (
+                self.data_train.iloc[train_index],
+                self.data_train.iloc[test_index],
+            )
+            y_tr, y_te = (
+                self.labels_train[train_index],
+                self.labels_train[test_index],
+            )
+            groups_tr = self.groups_train[train_index]
+
+            (X_tr, y_tr, eval_set_inner,) = self._get_validation_split(
+                data=X_tr, labels=y_tr, groups=groups_tr, train_size=0.8,
+            )
+            (X_tr, y_tr, sample_weight,) = self._balance_samples(
+                data=X_tr, labels=y_tr, method=self.balancing
+            )
+            inner_model = XGBClassifier(
+                objective="binary:logistic",
+                booster="gbtree",
+                use_label_encoder=False,
+                eval_metric="logloss",
+                n_estimators=100,
+                learning_rate=learning_rate,
+                gamma=gamma,
+                max_depth=int(max_depth),
+                colsample_bytree=colsample_bytree,
+                subsample=subsample,
+            )
+            inner_model.fit(
+                X=X_tr,
+                y=y_tr,
+                eval_set=eval_set_inner,
+                early_stopping_rounds=20,
+                sample_weight=sample_weight,
+                verbose=False,
+            )
+            y_probs = inner_model.predict_proba(X=X_te)
+            score = log_loss(y_te, y_probs, labels=[0, 1])
+            scores.append(score)
+        # Return the negative MLOGLOSS
+        return -1.0 * np.mean(scores)
+
+    def fit(
+        self, data: np.ndarray, labels: np.ndarray, groups: np.ndarray
+    ) -> None:
+        """"""
+        self.data_train = data
+        self.labels_train = labels
+        self.groups_train = groups
+
+        if self.optimize:
+            self.model = self._bayesian_optimization()
+        else:
+            self.model = XGBClassifier(
+                objective="binary:logistic",
+                booster="gbtree",
+                use_label_encoder=False,
+                n_estimators=200,
+                eval_metric="logloss",
+            )
+
+        # Train outer model
+        (
+            self.data_train,
+            self.labels_train,
+            eval_set,
+        ) = self._get_validation_split(
+            self.data_train,
+            self.labels_train,
+            self.groups_train,
+            train_size=0.8,
+        )
+        (
+            self.data_train,
+            self.labels_train,
+            sample_weight,
+        ) = self._balance_samples(
+            data=data, labels=labels, method=self.balancing
+        )
+
+        self.model.fit(
+            self.data_train,
+            self.labels_train,
+            eval_set=eval_set,
+            early_stopping_rounds=20,
+            sample_weight=sample_weight,
+            verbose=False,
+        )
+
 
 @dataclass
 class SVC_Lin(Decoder):
@@ -454,7 +572,6 @@ def classify_svm_lin(X_train, y_train, group_train, optimize, balance):
         ):
             X_tr, X_te = X_train[train_index], X_train[test_index]
             y_tr, y_te = y_train[train_index], y_train[test_index]
-            X_tr, y_tr, sample_weight = _balance_samples(X_tr, y_tr, balance)
             inner_model = SVC(
                 kernel="linear",
                 C=C,
@@ -501,10 +618,6 @@ def classify_svm_lin(X_train, y_train, group_train, optimize, balance):
             class_weight=None,
             verbose=False,
         )
-    # Train outer model
-    X_train, y_train, sample_weight = _balance_samples(
-        X_train, y_train, balance
-    )
     model.fit(X_train, y_train, sample_weight=sample_weight)
     return model
 
@@ -523,7 +636,6 @@ def classify_svm_rbf(X_train, y_train, group_train, optimize, balance):
         ):
             X_tr, X_te = X_train[train_index], X_train[test_index]
             y_tr, y_te = y_train[train_index], y_train[test_index]
-            X_tr, y_tr, sample_weight = _balance_samples(X_tr, y_tr, balance)
             inner_model = SVC(
                 kernel="rbf",
                 C=C,
@@ -569,16 +681,8 @@ def classify_svm_rbf(X_train, y_train, group_train, optimize, balance):
             class_weight=None,
             verbose=False,
         )
-    # Train outer model
-    X_train, y_train, sample_weight = _balance_samples(
-        X_train, y_train, balance
-    )
     model.fit(X_train, y_train, sample_weight=sample_weight)
     return model
-
-
-balance = "undersample"
-optimize = False
 
 
 def classify_svm_poly(X_train, y_train, group_train):
@@ -595,7 +699,6 @@ def classify_svm_poly(X_train, y_train, group_train):
         ):
             X_tr, X_te = X_train[train_index], X_train[test_index]
             y_tr, y_te = y_train[train_index], y_train[test_index]
-            X_tr, y_tr, sample_weight = _balance_samples(X_tr, y_tr, balance)
             inner_model = SVC(
                 kernel="poly",
                 C=C,
@@ -641,10 +744,6 @@ def classify_svm_poly(X_train, y_train, group_train):
             class_weight=None,
             verbose=False,
         )
-    # Train outer model
-    X_train, y_train, sample_weight = _balance_samples(
-        X_train, y_train, balance
-    )
     model.fit(X_train, y_train, sample_weight=sample_weight)
     return model
 
@@ -663,7 +762,6 @@ def classify_svm_sig(X_train, y_train, group_train, optimize, balance):
         ):
             X_tr, X_te = X_train[train_index], X_train[test_index]
             y_tr, y_te = y_train[train_index], y_train[test_index]
-            X_tr, y_tr, sample_weight = _balance_samples(X_tr, y_tr, balance)
             inner_model = SVC(
                 kernel="sigmoid",
                 C=C,
@@ -709,126 +807,6 @@ def classify_svm_sig(X_train, y_train, group_train, optimize, balance):
             class_weight=None,
             verbose=False,
         )
-    # Train outer model
-    X_train, y_train, sample_weight = _balance_samples(
-        X_train, y_train, balance
-    )
+
     model.fit(X_train, y_train, sample_weight=sample_weight)
     return model
-
-
-def classify_xgb(X_train, y_train, group_train, optimize, balance):
-    """"""
-
-    def bo_tune(max_depth, gamma, learning_rate, subsample, colsample_bytree):
-        # Cross validating with the specified parameters in n_splits folds
-        cv_inner = GroupShuffleSplit(
-            n_splits=3, train_size=0.66, random_state=42
-        )
-        scores = []
-        for train_index, test_index in cv_inner.split(
-            X_train, y_train, group_train
-        ):
-            X_tr = np.ascontiguousarray(X_train[train_index])
-            X_te = np.ascontiguousarray(X_train[test_index])
-            y_tr, y_te = y_train[train_index], y_train[test_index]
-            groups_split = group_train[train_index]
-            val_inner_split = GroupShuffleSplit(
-                n_splits=1, train_size=0.8, random_state=41
-            )
-            for train_ind, val_ind in val_inner_split.split(
-                X_tr, y_tr, groups_split
-            ):
-                X_tr, X_va = X_tr[train_ind], X_tr[val_ind]
-                y_tr, y_va = y_tr[train_ind], y_tr[val_ind]
-                X_tr, y_tr, sample_weight = _balance_samples(
-                    X_tr, y_tr, balance
-                )
-                eval_set_inner = [(X_va, y_va)]
-                inner_model = XGBClassifier(
-                    objective="binary:logistic",
-                    use_label_encoder=False,
-                    eval_metric="logloss",
-                    n_estimators=200,
-                    gamma=gamma,
-                    learning_rate=learning_rate,
-                    max_depth=int(max_depth),
-                    colsample_bytree=colsample_bytree,
-                    subsample=subsample,
-                )
-                inner_model.fit(
-                    X_tr,
-                    y_tr,
-                    eval_set=eval_set_inner,
-                    early_stopping_rounds=10,
-                    sample_weight=sample_weight,
-                    verbose=False,
-                )
-                y_probs = inner_model.predict_proba(X_te)
-                score = log_loss(y_te, y_probs, labels=[0, 1])
-                scores.append(score)
-        # Return the negative MLOGLOSS
-        return -1.0 * np.mean(scores)
-
-    if optimize:
-        # Perform Bayesian Optimization
-        xgb_bo = BayesianOptimization(
-            bo_tune,
-            {
-                "max_depth": (4, 10),
-                "gamma": (0, 1),
-                "learning_rate": (0.001, 0.3),
-                "colsample_bytree": (0.1, 1),
-                "subsample": (0.8, 1),
-            },
-        )
-        xgb_bo.maximize(init_points=10, n_iter=20, acq="ei")
-        # Train outer model with optimized parameters
-        params = xgb_bo.max["params"]
-        params["max_depth"] = int(params["max_depth"])
-        model = XGBClassifier(
-            objective="binary:logistic",
-            use_label_encoder=False,
-            n_estimators=200,
-            eval_metric="logloss",
-            gamma=params["gamma"],
-            learning_rate=params["learning_rate"],
-            max_depth=params["max_depth"],
-            subsample=params["subsample"],
-            colsample_bytree=params["colsample_bytree"],
-        )
-    else:
-        # Use default values
-        model = XGBClassifier(
-            objective="binary:logistic",
-            use_label_encoder=False,
-            n_estimators=200,
-            eval_metric="logloss",
-        )
-    # Train outer model
-    val_split = GroupShuffleSplit(n_splits=1, train_size=0.8)
-    for train_ind, val_ind in val_split.split(X_train, y_train, group_train):
-        X_val = np.ascontiguousarray(X_train[val_ind])
-        X_train = np.ascontiguousarray(X_train[train_ind])
-        y_train, y_val = (
-            np.ascontiguousarray(y_train[train_ind]),
-            np.ascontiguousarray(y_train[val_ind]),
-        )
-        eval_set = [(X_val, y_val)]
-        X_train, y_train, sample_weight = _balance_samples(
-            X_train, y_train, balance
-        )
-        model.fit(
-            X_train,
-            y_train,
-            eval_set=eval_set,
-            early_stopping_rounds=10,
-            sample_weight=sample_weight,
-            verbose=False,
-        )
-    return model
-
-
-def _balance_samples(test1, test2, test3):
-    """"""
-    return test1, test2, test3

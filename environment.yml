@@ -6,6 +6,7 @@ dependencies:
   - bayesian-optimization
   - catboost
   - imbalanced-learn
+  - filterpy
   - joblib
   - matplotlib
   - mne
@@ -13,8 +14,13 @@ dependencies:
   - numba
   - numpy
   - pandas
+  - pip
   - plotly
   - scikit-learn
   - scipy
-  - statannotations
+  - seaborn
   - xgboost
+  - pip:
+    - pybids
+    - statannotations
+    

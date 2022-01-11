@@ -9,14 +9,16 @@ def get_earliest_timepoint(
     data: np.ndarray,
     x_lims: tuple,
     sfreq: Optional[Union[int, float]] = None,
-    threshold: Union[int, float, tuple] = (0.0, 1.0),
+    threshold: Union[
+        int, float, tuple[Union[int, float], Union[int, float]]
+    ] = (0.0, 1.0),
     n_perm: int = 1000,
     alpha: float = 0.05,
     correction_method: str = "cluster",
 ):
     """Get earliest timepoint of motor onset prediction."""
     threshold_value, _ = transform_threshold(
-        threshold=threshold, sfreq=sfreq, data=data
+        threshold=threshold, sfreq=sfreq, data=data.T
     )
 
     p_vals = pte.stats.timeseries_pvals(
@@ -38,7 +40,7 @@ def get_earliest_timepoint(
 
 
 def transform_threshold(
-    threshold: Union[Iterable, int, float],
+    threshold: Union[int, float, Iterable],
     sfreq: Union[int, float],
     data: np.ndarray,
 ):
@@ -49,5 +51,5 @@ def transform_threshold(
         threshold_value = np.mean(
             data[int(threshold[0] * sfreq) : int(threshold[1] * sfreq)]
         )
-    threshold_arr = np.ones_like(data[:, 0]) * threshold_value
+    threshold_arr = np.ones(data.shape[0]) * threshold_value
     return threshold_value, threshold_arr

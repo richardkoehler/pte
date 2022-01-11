@@ -1,0 +1,31 @@
+name: pte-dev
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - bayesian-optimization
+  - black
+  - catboost
+  - imbalanced-learn
+  - filterpy
+  - joblib
+  - jupyter
+  - jupyterlab
+  - matplotlib
+  - mne
+  - mne-bids
+  - numba
+  - numpy
+  - pandas
+  - pip
+  - plotly
+  - pylint
+  - python>=3.9
+  - scikit-learn
+  - scipy
+  - seaborn
+  - xgboost
+  - pip:
+    - pybids
+    - statannotations
+    

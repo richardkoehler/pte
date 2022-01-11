@@ -8,7 +8,10 @@ import pte
 
 
 def timeseries_pvals(
-    x: Iterable, y: Union[Iterable, int, float], n_perm: int, two_tailed: bool
+    x: np.ndarray,
+    y: Union[int, float, np.ndarray],
+    n_perm: int,
+    two_tailed: bool,
 ):
     """Calculate sample-wise p-values for array of predictions."""
     p_vals = np.empty(len(x))
