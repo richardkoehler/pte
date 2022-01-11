@@ -12,6 +12,7 @@ from imblearn.over_sampling import (
     SMOTE,
 )
 from imblearn.under_sampling import RandomUnderSampler
+import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.utils.class_weight import compute_sample_weight
 
@@ -38,14 +39,14 @@ class Decoder(ABC):
 
     @staticmethod
     def _get_validation_split(
-        data, labels, groups, train_size: float = 0.75
+        data: pd.DataFrame, labels: np.ndarray, groups: np.ndarray, train_size: float = 0.8
     ) -> tuple:
         """Split data into single training and validation set."""
         val_split = GroupShuffleSplit(n_splits=1, train_size=train_size)
         for train_ind, val_ind in val_split.split(data, labels, groups):
             data_train, data_val = (
-                data[train_ind],
-                data[val_ind],
+                data.iloc[train_ind],
+                data.iloc[val_ind],
             )
             labels_train, labels_val = (
                 labels[train_ind],
@@ -56,7 +57,7 @@ class Decoder(ABC):
 
     @staticmethod
     def _balance_samples(
-        data: np.ndarray, target: np.ndarray, method: str = "oversample"
+        data: np.ndarray, labels: np.ndarray, method: str = "oversample"
     ) -> tuple:
         """Balance class sizes to create equal class distributions.
 
@@ -64,7 +65,7 @@ class Decoder(ABC):
         ----------
         data : numpy.ndarray of shape (n_features, n_samples)
             Data or features.
-        target : numpy.ndarray of shape (n_samples, )
+        labels : numpy.ndarray of shape (n_samples, )
             Array of class disribution
         method : {'oversample', 'undersample', 'weight'}
             Method to be used for rebalancing classes. 'oversample' will upsample
@@ -76,7 +77,7 @@ class Decoder(ABC):
         -------
         data : numpy.ndarray
             Rebalanced feature array of shape (n_features, n_samples)
-        target : numpy.ndarray
+        labels : numpy.ndarray
             Corresponding class distributions. Class sizes are now evenly balanced.
         sample_weight: numpy.ndarray of shape (n_samples, ) | None
             Sample weights if method = 'weight' else None
@@ -92,43 +93,43 @@ class Decoder(ABC):
             False,
         ]
         sample_weight = None
-        if np.mean(target) != 0.5:
+        if np.mean(labels) != 0.5:
             if method == "oversample":
                 ros = RandomOverSampler(sampling_strategy="auto")
-                data, target = ros.fit_resample(data, target)
+                data, labels = ros.fit_resample(data, labels)
             elif method == "smote":
                 ros = SMOTE(sampling_strategy="auto", k_neighbors=5)
-                data, target = ros.fit_resample(data, target)
+                data, labels = ros.fit_resample(data, labels)
             elif method == "borderline_smote":
                 ros = BorderlineSMOTE(
                     sampling_strategy="auto",
                     k_neighbors=5,
                     kind="borderline-1",
                 )
-                data, target = ros.fit_resample(data, target)
+                data, labels = ros.fit_resample(data, labels)
             elif method == "adasyn":
                 try:
                     ros = ADASYN(sampling_strategy="auto", n_neighbors=5)
-                    data, target = ros.fit_resample(data, target)
-                except ValueError as e:
+                    data, labels = ros.fit_resample(data, labels)
+                except ValueError as error:
                     if (
-                        len(e.args) > 0
-                        and e.args[0]
+                        len(error.args) > 0
+                        and error.args[0]
                         == "No samples will be generated with the provided ratio settings."
                     ):
                         pass
                     else:
-                        raise e
+                        raise error
             elif method == "undersample":
                 ros = RandomUnderSampler(sampling_strategy="auto")
-                data, target = ros.fit_resample(data, target)
+                data, labels = ros.fit_resample(data, labels)
             elif method == "weight":
                 sample_weight = compute_sample_weight(
-                    class_weight="balanced", y=target
+                    class_weight="balanced", y=labels
                 )
             else:
                 raise BalancingMethodNotFoundError(method, BALANCING_METHODS)
-        return data, target, sample_weight
+        return data, labels, sample_weight
 
 
 class BalancingMethodNotFoundError(Exception):
