@@ -37,6 +37,7 @@ def preprocess(
     line_freq: Optional[int] = None,
     fname: Optional[Union[str, Path]] = None,
     resample_freq: Optional[Union[int, float]] = 500,
+    bandstop_freq: Optional[Union[str, int, float, np.ndarray]] = "auto",
 ) -> mne.io.BaseRaw:
     """Preprocess data"""
     if not line_freq:
@@ -49,6 +50,20 @@ def preprocess(
     raw = raw.resample(sfreq=resample_freq, verbose=False)
     notch_freqs = np.arange(line_freq, raw.info["sfreq"] / 2, line_freq)
     raw = raw.notch_filter(notch_freqs, verbose=False)
+
+    if bandstop_freq == "auto":
+        if "StimOn" in fname:
+            bandstop_freq = 130
+        else:
+            bandstop_freq = None
+
+    if isinstance(bandstop_freq, (int, float)):
+        bandstop_freq = np.arange(bandstop_freq, raw.info["sfreq"] / 2, 130)
+
+    if bandstop_freq:
+        raw = raw.notch_filter(bandstop_freq, notch_widths=bandstop_freq * 0.2)
+        raw.plot_psd()
+
     raw = raw.set_eeg_reference(
         ref_channels="average", ch_type="ecog", verbose=False
     )
@@ -56,7 +71,11 @@ def preprocess(
         nm_channels_dir=nm_channels_dir, fname=fname
     )
     raw = mne.set_bipolar_reference(
-        raw, anode=anodes, cathode=cathodes, ch_name=ch_names, drop_refs=True,
+        raw,
+        anode=anodes,
+        cathode=cathodes,
+        ch_name=ch_names,
+        drop_refs=True,
     )
     raw = raw.reorder_channels(sorted(raw.ch_names))
     return raw
