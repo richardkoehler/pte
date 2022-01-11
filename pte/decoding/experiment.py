@@ -448,7 +448,7 @@ class Experiment:
 
         new_preds = (
             self._predict_epochs(
-                self.decoder.model, features_pred, self.pred_mode
+                self.decoder.model, features_pred, self.pred_mode, columns=cols
             )
             if len(features_pred) != 0
             else None
@@ -762,12 +762,13 @@ class Experiment:
         return [best_ecog, best_lfp]
 
     @staticmethod
-    def _predict_epochs(model, features: np.ndarray, mode: str) -> list[list]:
+    def _predict_epochs(model, features: np.ndarray, mode: str, columns: Optional[list] = None) -> list[list]:
         """"""
         predictions = []
         if features.ndim < 3:
             np.expand_dims(features, axis=0)
         for trial in features:
+            trial = pd.DataFrame(trial, columns=columns)
             if mode == "classification":
                 pred = model.predict(trial).tolist()
             elif mode == "probability":
