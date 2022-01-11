@@ -11,10 +11,8 @@ import pandas as pd
 import pte
 from .experiment import Experiment
 from .decode import get_decoder
-from ..settings import PATH_PYNEUROMODULATION
 
-sys.path.insert(0, PATH_PYNEUROMODULATION)
-from py_neuromodulation.nm_analysis import Feature_Reader
+from py_neuromodulation import nm_analysis
 
 
 def _run_single_experiment(
@@ -50,11 +48,12 @@ def _run_single_experiment(
         print("Using file: ", feature_file)
 
     # Read features using py_neuromodulation
-    nm_reader = Feature_Reader(
+    nm_reader = nm_analysis.Feature_Reader(
         feature_dir=feature_root, feature_file=feature_file
     )
     features = nm_reader.feature_arr
     settings = nm_reader.settings
+    sidecar = nm_reader.sidecar
 
     # Pick label for classification
     try:
@@ -123,7 +122,7 @@ def _run_single_experiment(
         features=features_df,
         target_df=target_df,
         label=label,
-        ch_names=settings["ch_names"],
+        ch_names=sidecar["ch_names"],
         decoder=decoder,
         side=side,
         artifacts=artifacts,
@@ -150,7 +149,9 @@ def run_experiment(
     if len(feature_files) == 1 or n_jobs in (0, 1):
         return [
             _run_single_experiment(
-                feature_root=feature_root, feature_file=feature_file, **kwargs,
+                feature_root=feature_root,
+                feature_file=feature_file,
+                **kwargs,
             )
             for feature_file in feature_files
         ]
@@ -167,13 +168,15 @@ def run_experiment(
 def _get_label(
     label_channels: list[str],
     features: pd.DataFrame,
-    nm_reader: Feature_Reader,
+    nm_reader: nm_analysis.Feature_Reader,
 ) -> pd.Series:
     """Read label DataFrame from given file."""
     for label_channel in label_channels:
         if label_channel in features.columns:
             label_data = nm_reader.read_target_ch(
-                feature_arr=features, label_name=label_channel, binarize=False,
+                feature_arr=features,
+                label_name=label_channel,
+                binarize=False,
             )
             return pd.Series(label_data, name=label_channel)
     raise ValueError(f"No valid label found. Labels given: {label_channels}.")
@@ -187,7 +190,10 @@ def _handle_exception_files(
 ):
     """Check if current file is listed in exception files."""
     if all(
-        (exception_files, any(exc in fullpath for exc in exception_files),)
+        (
+            exception_files,
+            any(exc in fullpath for exc in exception_files),
+        )
     ):
         print("Exception file recognized: ", os.path.basename(fullpath))
         return excep_dist_end
