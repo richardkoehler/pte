@@ -12,18 +12,98 @@ import numpy as np
 import pte
 
 
+def average_power(
+    powers: Union[
+        list[mne.time_frequency.AverageTFR],
+        list[mne.time_frequency.AverageTFR],
+    ],
+    picks: Union[str, list[str], slice],
+    baseline: Optional[
+        tuple[Optional[Union[int, float]], Optional[Union[int, float]]]
+    ] = (None, None),
+    baseline_mode: Optional[str] = "zscore",
+    clip: Optional[Union[int, float]] = None,
+) -> mne.time_frequency.AverageTFR:
+    """Return power averaged over given channel types or picks."""
+    if not isinstance(powers, list):
+        powers = [powers]
+    power_all = None
+    power_all_files = []
+    for power in powers:
+        power = power.copy().pick(picks=picks)
+        if baseline:
+            power = power.apply_baseline(
+                baseline=baseline, mode=baseline_mode, verbose=False
+            )
+        df_power = power.to_data_frame(picks=picks)
+        freqs = power.freqs
+        power_all_freqs = []
+        for freq in freqs:
+            power_single_freq = (
+                df_power[df_power["freq"] == freq]
+                .sort_values(by="time", axis=0)
+                .drop(columns=["freq", "time"])
+                .to_numpy()
+            )
+            # reject artifacts by clipping
+            if clip is not None:
+                power_single_freq = power_single_freq.clip(min=-clip, max=clip)
+            power_all_freqs.append(power_single_freq)
+        # Average across all channels
+        power_all_files.append(np.stack(power_all_freqs, axis=0).mean(axis=-1))
+    power_array_all = np.expand_dims(
+        np.stack(power_all_files, axis=0).mean(axis=0), axis=0
+    )
+    if clip:
+        power_array_all = power_array_all.clip(min=-clip, max=clip)
+    power = powers[0]
+    info = mne.create_info(
+        ch_names=1, sfreq=power.info["sfreq"], ch_types="misc", verbose=False
+    )
+    power_all = mne.time_frequency.AverageTFR(
+        info=info,
+        data=power_array_all,
+        times=power.times,
+        freqs=power.freqs,
+        nave=len(powers),
+        comment=power.comment,
+        method=power.method,
+    )
+    return power_all
+
+
+def load_power(
+    files: list[Union[Path, str]]
+) -> Union[
+    list[mne.time_frequency.AverageTFR], list[mne.time_frequency.EpochsTFR]
+]:
+    """Load power from *-tfr.h5 files."""
+    powers = []
+    for file in files:
+        powers.append(mne.time_frequency.read_tfrs(file, condition=0))
+    return powers
+
+
 def morlet_from_epochs(
     epochs: mne.Epochs,
     n_cycles: int = 7,
-    freqs: Optional[np.ndarray] = None,
+    freqs: Union[np.ndarray, str] = "auto",
     average: bool = True,
     n_jobs: int = -1,
     picks="all",
+    decim_power: Union[str, int, float] = "auto",
     **kwargs,
 ) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
     """Calculate power with MNE's Morlet transform and sensible defaults."""
     if freqs is None:
-        freqs = np.arange(1, epochs.info["sfreq"])
+        upper_freq = min(epochs.info["sfreq"] / 2, 200.0)
+        freqs = np.arange(1.0, upper_freq)
+
+    if decim_power == "auto":
+        decim = int(epochs.info["sfreq"] / 100)
+    else:
+        decim = decim_power
+
     power = mne.time_frequency.tfr_morlet(
         inst=epochs,
         freqs=freqs,
@@ -33,6 +113,7 @@ def morlet_from_epochs(
         average=average,
         return_itc=False,
         verbose=True,
+        decim=decim,
         **kwargs,
     )
     return power
@@ -77,7 +158,8 @@ def epochs_from_raw(
 
 
 def get_events(
-    raw: mne.io.Raw, event_picks: Union[str, list[str], list[tuple[str, str]]]
+    raw: mne.io.BaseRaw,
+    event_picks: Union[str, list[str], list[tuple[str, str]]],
 ) -> tuple[np.ndarray, dict]:
     """Get events from given Raw instance and event id."""
     if isinstance(event_picks, str):
@@ -89,21 +171,22 @@ def get_events(
         else:
             event_id = {event_pick[0]: 1, event_pick[1]: -1}
         try:
-            events, event_id = mne.events_from_annotations(
-                raw=raw, event_id=event_id, verbose=True,
+            events, _ = mne.events_from_annotations(
+                raw=raw,
+                event_id=event_id,
+                verbose=True,
             )
-            break
-        except ValueError:
-            pass
-    if events is None:
-        _, event_id_found = mne.events_from_annotations(
-            raw=raw, verbose=False,
-        )
-        raise ValueError(
-            f"None of the given `event_picks´ found: {event_picks}."
-            f"Possible events: {*event_id_found.keys(),}"
-        )
-    return events, event_id
+            return events, event_id
+        except ValueError as error:
+            print(error)
+    _, event_id_found = mne.events_from_annotations(
+        raw=raw,
+        verbose=False,
+    )
+    raise ValueError(
+        f"None of the given `event_picks´ found: {event_picks}."
+        f"Possible events: {*event_id_found.keys(),}"
+    )
 
 
 def discard_epochs(
@@ -128,41 +211,52 @@ def discard_epochs(
 
 def power_from_bids(
     file: mne_bids.BIDSPath,
+    nm_channels_dir: Path,
     events_trial_onset: Optional[list[str]] = None,
     events_trial_end: Optional[list[str]] = None,
     min_distance_trials: Union[int, float] = 0,
     bad_events_dir: Optional[Union[Path, str]] = None,
     out_dir: Optional[Union[Path, str]] = None,
-    **kwargs,
-) -> mne.time_frequency.AverageTFR:
+    kwargs_preprocess: Optional[dict] = None,
+    kwargs_epochs: Optional[dict] = None,
+    kwargs_power: Optional[dict] = None,
+) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
     """Calculate power from single file."""
     print(f"File: {file.basename}")
     raw = mne_bids.read_raw_bids(file, verbose=False)
 
-    decim_power = "auto"
-    if "decim" in kwargs:
-        decim_power = kwargs.pop("decim")
+    if kwargs_preprocess:
+        raw = pte.processing.preprocess(
+            raw=raw,
+            nm_channels_dir=nm_channels_dir,
+            **kwargs_preprocess,
+        )
+    else:
+        raw = pte.processing.preprocess(
+            raw=raw,
+            nm_channels_dir=nm_channels_dir,
+        )
 
-    args_preprocess = {"raw": raw}
-    for key in inspect.getfullargspec(pte.processing.preprocess)[0]:
-        if key in kwargs:
-            args_preprocess[key] = kwargs[key]
-    raw = pte.processing.preprocess(**args_preprocess)
-
-    args_epochs = {"raw": raw}
-    for key in inspect.getfullargspec(mne.Epochs)[0]:
-        if key in kwargs:
-            args_epochs[key] = kwargs[key]
-    epochs = epochs_from_raw(
-        **args_epochs,
-        events_trial_onset=events_trial_onset,
-        events_trial_end=events_trial_end,
-        min_distance_trials=min_distance_trials,
-    )
+    if kwargs_epochs:
+        epochs = epochs_from_raw(
+            raw=raw,
+            events_trial_onset=events_trial_onset,
+            events_trial_end=events_trial_end,
+            min_distance_trials=min_distance_trials,
+            **kwargs_epochs,
+        )
+    else:
+        epochs = epochs_from_raw(
+            raw=raw,
+            events_trial_onset=events_trial_onset,
+            events_trial_end=events_trial_end,
+            min_distance_trials=min_distance_trials,
+        )
 
     if bad_events_dir:
         bad_events = pte.filetools.get_bad_events(
-            bad_events_path=bad_events_dir, fname=file,
+            bad_events_path=bad_events_dir,
+            fname=file.fpath,
         )
         if bad_events is not None:
             bad_indices = np.array(
@@ -174,44 +268,54 @@ def power_from_bids(
             )
             epochs = epochs.drop(indices=bad_indices)
 
-    if decim_power == "auto":
-        decim = int(epochs.info["sfreq"] / 100)
+    if not kwargs_power or "freqs" not in kwargs_power:
+        freqs = np.arange(1, 200, 1)
     else:
-        decim = decim_power
-    kwargs_power = {"decim": decim}
-    for key in inspect.getfullargspec(mne.time_frequency.tfr_morlet)[0]:
-        if key in kwargs:
-            kwargs_power[key] = kwargs[key]
-        if "freqs" not in kwargs_power:
-            kwargs_power["freqs"] = np.arange(1, 200, 1)
+        freqs = kwargs_power.pop("freqs")
+    if kwargs_power:
+        power = morlet_from_epochs(
+            epochs=epochs,
+            freqs=freqs,
+            **kwargs_power,
+        )
+    else:
+        power = morlet_from_epochs(
+            epochs=epochs,
+            freqs=freqs,
+        )
 
-    power = morlet_from_epochs(epochs=epochs, **kwargs_power,)
     if out_dir:
-        fname = Path(out_dir) / (str(Path(file).stem) + "_tfr.h5")
+        fname = Path(out_dir) / (str(file.fpath.stem) + "_tfr.h5")
         power.save(fname=fname, verbose=True)
     return power
 
 
 def power_from_files(
     filenames: list[mne_bids.BIDSPath],
+    nm_channels_dir,
     events_trial_onset: Optional[list[str]],
     out_dir: Optional[Union[Path, str]] = None,
     bad_events_dir: Optional[Union[Path, str]] = None,
     min_distance_trials: Union[int, float] = 0,
-    decim: Union[int, str] = "auto",
+    kwargs_preprocess: Optional[dict] = None,
+    kwargs_epochs: Optional[dict] = None,
+    kwargs_power: Optional[dict] = None,
     **kwargs,
-) -> None:
+) -> list[Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]]:
     """Perform Morlet transform on batch of given BIDS files."""
     if not filenames:
         raise ValueError("No filenames given.")
     return [
         power_from_bids(
             file=file,
+            nm_channels_dir=nm_channels_dir,
             events_trial_onset=events_trial_onset,
             out_dir=out_dir,
             bad_events_dir=bad_events_dir,
             min_distance_trials=min_distance_trials,
-            decim=decim,
+            kwargs_preprocess=kwargs_preprocess,
+            kwargs_epochs=kwargs_epochs,
+            kwargs_power=kwargs_power,
             **kwargs,
         )
         for file in filenames
