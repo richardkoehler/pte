@@ -3,7 +3,7 @@ import os
 import sys
 from pathlib import Path
 from joblib import Parallel, delayed
-from typing import Iterable, Optional, Union
+from typing import Iterable, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,36 @@ from .experiment import Experiment
 from .decode import get_decoder
 
 from py_neuromodulation import nm_analysis
+
+
+def run_experiment(
+    feature_root: Union[Path, str],
+    feature_files: Union[Path, str, list[Union[Path, str]]],
+    n_jobs: int = 1,
+    **kwargs,
+) -> list[Optional[Experiment]]:
+    """Run prediction experiment with given number of files."""
+    if not feature_files:
+        raise ValueError("No feature files specified.")
+    if not isinstance(feature_files, list):
+        feature_files = [feature_files]
+    if len(feature_files) == 1 or n_jobs in (0, 1):
+        return [
+            _run_single_experiment(
+                feature_root=feature_root,
+                feature_file=feature_file,
+                **kwargs,
+            )
+            for feature_file in feature_files
+        ]
+    return [
+        Parallel(n_jobs=n_jobs)(
+            delayed(_run_single_experiment)(
+                feature_root=feature_root, feature_file=feature_file, **kwargs
+            )
+            for feature_file in feature_files
+        )
+    ]  # type: ignore
 
 
 def _run_single_experiment(
@@ -28,20 +58,20 @@ def _run_single_experiment(
     use_channels,
     use_features,
     cross_validation,
-    scoring="balanced_accuracy",
-    plot_target_channels=None,
+    scoring: str = "balanced_accuracy",
+    plot_target_channels: Optional[list[str]] = None,
     artifact_channels=None,
     bad_events_path=None,
-    pred_mode="classify",
-    pred_begin=-3.0,
-    pred_end=2.0,
-    use_times=1,
-    dist_onset=2.0,
-    dist_end=2.0,
-    excep_dist_end=0.5,
+    pred_mode: str = "classify",
+    pred_begin: Union[int, float] = -3.0,
+    pred_end: Union[int, float] = 2.0,
+    use_times: int = 1,
+    dist_onset: Union[int, float] = 2.0,
+    dist_end: Union[int, float] = 2.0,
+    excep_dist_end: Union[int, float] = 0.5,
     exceptions=None,
     feature_importance=False,
-    verbose=True,
+    verbose: bool = True,
 ) -> Optional[Experiment]:
     """Run experiment with single file."""
     if verbose:
@@ -49,7 +79,7 @@ def _run_single_experiment(
 
     # Read features using py_neuromodulation
     nm_reader = nm_analysis.Feature_Reader(
-        feature_dir=feature_root, feature_file=feature_file
+        feature_dir=str(feature_root), feature_file=str(feature_file)
     )
     features = nm_reader.feature_arr
     settings = nm_reader.settings
@@ -57,7 +87,10 @@ def _run_single_experiment(
 
     # Pick label for classification
     try:
-        label = _get_label(label_channels, features, nm_reader)
+        label = _get_column_picks(
+            column_picks=label_channels,
+            features=features,
+        )
     except ValueError as error:
         print(error, "Discarding file: {feature_file}")
         return None
@@ -66,15 +99,22 @@ def _run_single_experiment(
     bad_events = pte.filetools.get_bad_events(bad_events_path, feature_file)
 
     # Pick target for plotting predictions
-    target_df = _get_target_df(plot_target_channels, features)
+    target_series = _get_column_picks(
+        column_picks=plot_target_channels,
+        features=features,
+    )
+    print("Target channels found:", target_series.name)
 
     features_df = _get_feature_df(features, use_features, use_times)
 
     # Pick artifact channel
-    artifacts = None
     if artifact_channels:
-        artifacts = _get_target_df(artifact_channels, features).values
-
+        artifacts = _get_column_picks(
+            column_picks=artifact_channels,
+            features=features,
+        ).to_numpy()
+    else:
+        artifacts = None
     # Generate output file name
     out_path = _generate_outpath(
         out_root,
@@ -94,7 +134,7 @@ def _run_single_experiment(
         excep_dist_end=excep_dist_end,
     )
 
-    side = "right" if "R_" in out_path else "left"
+    side = "right" if "R_" in str(out_path) else "left"
 
     decoder = get_decoder(
         classifier=classifier,
@@ -120,7 +160,7 @@ def _run_single_experiment(
     # Initialize Experiment instance
     experiment = Experiment(
         features=features_df,
-        target_df=target_df,
+        target_df=target_series,
         label=label,
         ch_names=sidecar["ch_names"],
         decoder=decoder,
@@ -133,36 +173,6 @@ def _run_single_experiment(
     experiment.run()
     experiment.save(path=out_path)
     return experiment
-
-
-def run_experiment(
-    feature_root: Union[Path, str],
-    feature_files: Union[Path, str, list[Union[Path, str]]],
-    n_jobs: int = 1,
-    **kwargs,
-) -> list[Experiment]:
-    """Run prediction experiment with given number of files."""
-    if not feature_files:
-        raise ValueError("No feature files specified.")
-    if not isinstance(feature_files, list):
-        feature_files = [feature_files]
-    if len(feature_files) == 1 or n_jobs in (0, 1):
-        return [
-            _run_single_experiment(
-                feature_root=feature_root,
-                feature_file=feature_file,
-                **kwargs,
-            )
-            for feature_file in feature_files
-        ]
-    return [
-        Parallel(n_jobs=n_jobs)(
-            delayed(_run_single_experiment)(
-                feature_root=feature_root, feature_file=feature_file, **kwargs
-            )
-            for feature_file in feature_files
-        )
-    ]
 
 
 def _get_label(
@@ -183,33 +193,29 @@ def _get_label(
 
 
 def _handle_exception_files(
-    fullpath: str,
+    fullpath: Union[Path, str],
     exception_files: Optional[Iterable],
     dist_end: Union[int, float],
     excep_dist_end: Union[int, float],
 ):
     """Check if current file is listed in exception files."""
-    if all(
-        (
-            exception_files,
-            any(exc in fullpath for exc in exception_files),
-        )
-    ):
-        print("Exception file recognized: ", os.path.basename(fullpath))
-        return excep_dist_end
+    if exception_files:
+        if any(exc in str(fullpath) for exc in exception_files):
+            print("Exception file recognized: ", os.path.basename(fullpath))
+            return excep_dist_end
     return dist_end
 
 
 def _generate_outpath(
-    root: str,
-    feature_file: str,
+    root: Union[Path, str],
+    feature_file: Union[Path, str],
     classifier: str,
     target_begin: Union[str, int, float],
     target_end: Union[str, int, float],
     use_channels: str,
     optimize: bool,
     use_times: int,
-) -> str:
+) -> Path:
     """Generate file name for output files."""
     if target_begin == 0.0:
         target_begin = "trial_begin"
@@ -221,7 +227,7 @@ def _generate_outpath(
     opt_str = "opt_yes" if optimize else "opt_no"
     feat_str = "_".join(("feats", str(use_times * 100), "ms"))
     out_name = "_".join((target_str, clf_str, ch_str, opt_str, feat_str))
-    return os.path.join(root, out_name, feature_file, feature_file)
+    return Path(root, out_name, feature_file, feature_file)
 
 
 def _get_feature_df(
@@ -259,20 +265,16 @@ def _get_feature_df(
     return pd.concat(feat_list, axis=1).fillna(0.0)
 
 
-def _get_target_df(
-    targets: Iterable, features_df: pd.DataFrame, verbose: bool = False
-) -> pd.DataFrame:
-    """Extract target DataFrame from features DataFrame."""
-    i = 0
-    target_df = pd.DataFrame()
-    while len(target_df.columns) == 0:
-        target_pick = targets[i].lower()
-        col_picks = [
-            col for col in features_df.columns if target_pick in col.lower()
-        ]
-        for col in col_picks[:1]:
-            target_df[col] = features_df[col]
-        i += 1
-    if verbose:
-        print("Channel used: ", target_df.columns[0])
-    return target_df
+def _get_column_picks(
+    column_picks: Optional[Sequence[str]],
+    features: pd.DataFrame,
+) -> pd.Series:
+    """Return first found column pick from features DataFrame."""
+    if column_picks:
+        for pick in column_picks:
+            for col in features.columns:
+                if pick.lower() in col.lower():
+                    return pd.Series(data=features[col], name=col)
+    raise ValueError(
+        f"No valid column found. `column_picks` given: {column_picks}."
+    )

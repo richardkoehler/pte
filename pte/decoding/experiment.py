@@ -7,10 +7,9 @@ from typing import Any, Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
-import sklearn
+from sklearn import model_selection
 from sklearn.inspection import permutation_importance
 from sklearn.metrics import balanced_accuracy_score
-from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
 from pte.decoding.decode_abc import Decoder
 
@@ -33,30 +32,24 @@ class Results:
 
     def _init_features(self) -> None:
         """Initialize features dictionary."""
-
-        self.features = self._init_epoch_dict(
-            self.ch_names, self.use_channels, self.target_name
-        )
-        self.features["Label"] = []
-        self.features["LabelName"] = self.label_name
+        self.features = self._init_epoch_dict()
         self.features["ChannelNames"] = self.ch_names
 
     def _init_predictions(self) -> None:
         """Initialize predictions dictionary."""
+        self.predictions = self._init_epoch_dict()
 
-        self.predictions = self._init_epoch_dict(
-            self.ch_names, self.use_channels, self.target_name
-        )
-        self.predictions["Label"] = []
-        self.predictions["LabelName"] = self.label_name
-
-    @staticmethod
     def _init_epoch_dict(
-        ch_names: list, use_channels: str, target_name: str
+        self,
     ) -> dict:
         """Initialize results dictionary."""
-        results = {"Target": [], "TargetName": target_name}
-        if use_channels in [
+        results = {
+            "Target": [],
+            "TargetName": self.target_name,
+            "Label": [],
+            "LabelName": self.label_name,
+        }
+        if self.use_channels in [
             "all",
             "all_contralat",
             "all_ipsilat",
@@ -65,12 +58,16 @@ class Results:
             "single_best_ipsilat",
         ]:
             results.update({ch: [] for ch in ["ECOG", "LFP"]})
-        elif use_channels in ["single", "single_contralat", "single_ipsilat"]:
-            results.update({ch: [] for ch in ch_names})
+        elif self.use_channels in [
+            "single",
+            "single_contralat",
+            "single_ipsilat",
+        ]:
+            results.update({ch: [] for ch in self.ch_names})
         else:
             raise ValueError(
                 f"Input value for `use_channels` not allowed. Got: "
-                f"{use_channels}."
+                f"{self.use_channels}."
             )
         return results
 
@@ -142,13 +139,17 @@ class Results:
 
         # Save predictions time-locked to trial onset
         with open(
-            path + "_predictions_timelocked.json", "w", encoding="utf-8",
+            path + "_predictions_timelocked.json",
+            "w",
+            encoding="utf-8",
         ) as file:
             json.dump(self.predictions, file)
 
         # Save features time-locked to trial onset
         with open(
-            path + "_features_timelocked.json", "w", encoding="utf-8",
+            path + "_features_timelocked.json",
+            "w",
+            encoding="utf-8",
         ) as file:
             json.dump(self.features, file)
 
@@ -213,14 +214,14 @@ class Experiment:
     """Class for running prediction experiments."""
 
     features: pd.DataFrame
-    target_df: pd.DataFrame
-    label: pd.DataFrame
+    target_df: pd.Series
+    label: pd.Series
     ch_names: list[str]
     decoder: Optional[Decoder] = None
     side: Optional[str] = None
     artifacts: Optional[np.ndarray] = None
     bad_epochs: Optional[Iterable[int]] = None
-    sfreq: int = None
+    sfreq: Optional[int] = None
     scoring: str = "balanced_accuracy"
     feature_importance: Any = False
     target_begin: Union[str, float, int] = "trial_onset"
@@ -231,10 +232,10 @@ class Experiment:
     pred_mode: str = "classify"
     pred_begin: Union[float, int] = -3.0
     pred_end: Union[float, int] = 3.0
-    cv_outer: sklearn.model_selection.BaseCrossValidator = GroupKFold(
+    cv_outer: model_selection.BaseCrossValidator = model_selection.GroupKFold(
         n_splits=5
     )
-    cv_inner: sklearn.model_selection.BaseCrossValidator = GroupKFold(
+    cv_inner: model_selection.BaseCrossValidator = model_selection.GroupKFold(
         n_splits=5
     )
     verbose: bool = False
@@ -258,7 +259,7 @@ class Experiment:
         )
 
         self.results = Results(
-            target_name=self.target_df.columns[-1],
+            target_name=self.target_df.name,
             label_name=self.label.name,
             ch_names=self.ch_names,
             use_channels=self.use_channels,
@@ -333,7 +334,9 @@ class Experiment:
         )
         # Save all features used for classificaiton
         self.feature_epochs["Label"] = self.labels
-        self.feature_epochs.to_csv(path_str + "_features_concatenated.csv",)
+        self.feature_epochs.to_csv(
+            path_str + "_features_concatenated.csv",
+        )
 
     def _update_results_labels(self, events_used: np.ndarray) -> None:
         """Update results with prediction labels"""
@@ -487,7 +490,7 @@ class Experiment:
         )
 
     def _init_channel_names(
-        self, ch_names: list, use_channels: str, side: str
+        self, ch_names: list, use_channels: str, side: Optional[str] = None
     ) -> list:
         """Initialize channels to be used."""
         case_all = ["single", "single_best", "all"]
@@ -677,7 +680,7 @@ class Experiment:
             if artifacts is not None:
                 data_art = artifacts[ind_end:ind_onset]
                 bool_art = np.flatnonzero(data_art)
-                ind_art = bool_art[-1] if bool_art.size != 0 else 0.
+                ind_art = bool_art[-1] if bool_art.size != 0 else 0.0
                 baseline = baseline - ind_art
         return baseline
 
@@ -722,7 +725,7 @@ class Experiment:
         features: pd.DataFrame,
         labels: np.ndarray,
         groups: np.ndarray,
-        cv=GroupShuffleSplit(n_splits=5, test_size=0.2),
+        cv=model_selection.GroupShuffleSplit(n_splits=5, test_size=0.2),
     ) -> list[str, str]:
         """"""
         results = {ch_name: [] for ch_name in ch_names}
@@ -762,7 +765,9 @@ class Experiment:
         return [best_ecog, best_lfp]
 
     @staticmethod
-    def _predict_epochs(model, features: np.ndarray, mode: str, columns: Optional[list] = None) -> list[list]:
+    def _predict_epochs(
+        model, features: np.ndarray, mode: str, columns: Optional[list] = None
+    ) -> list[list]:
         """"""
         predictions = []
         if features.ndim < 3:
