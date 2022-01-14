@@ -7,10 +7,10 @@ from typing import Callable, Iterable, Optional, Union
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from matplotlib import axes, cm, collections, patheffects
+from matplotlib import axes, cm, collections, figure, patheffects
 from matplotlib import pyplot as plt
-from statannotations.Annotator import Annotator
-from statannotations.stats.StatTest import StatTest
+from statannotations import Annotator
+from statannotations.stats import StatTest
 
 import pte
 
@@ -163,7 +163,7 @@ def _add_stats(
     order: Iterable,
     hue: Optional[str],
     hue_order: Optional[Iterable],
-    stat_test: str,
+    stat_test: Union[str, StatTest.StatTest],
     alpha: float,
 ):
     """Perform statistical test and annotate graph."""
@@ -177,7 +177,7 @@ def _add_stats(
         pairs = [item for sublist in pairs for item in sublist]
 
     if stat_test == "Permutation":
-        stat_test = StatTest(
+        stat_test = StatTest.StatTest(
             func=_permutation_wrapper,
             n_perm=10000,
             alpha=alpha,
@@ -185,9 +185,9 @@ def _add_stats(
             test_short_name="Perm.",
             stat_name="Effect Size",
         )
-    annotator = Annotator(
-        ax,
-        pairs,
+    annotator = Annotator.Annotator(
+        ax=ax,
+        pairs=pairs,
         data=data,
         x=x,
         y=y,
@@ -214,16 +214,18 @@ def lineplot_prediction(
     outpath: Optional[Union[Path, str]] = None,
     title: Optional[str] = None,
     subtitle: Optional[str] = None,
-    label: str = "Distance from Hyperplane",
+    label: Optional[str] = "Distance from Hyperplane",
     y_label: str = None,
-    threshold: Union[int, float, tuple] = (0.0, 1.0),
+    threshold: Union[
+        int, float, tuple[Union[int, float], Union[int, float]]
+    ] = (0.0, 1.0),
     p_lim: float = 0.05,
     n_perm: int = 1000,
     correction_method: str = "cluster",
     two_tailed: bool = False,
     ylims=None,
     compare_xy: bool = False,
-) -> None:
+) -> figure.Figure:
     """Plot averaged time-locked predictions including statistical tests."""
     viridis = cm.get_cmap("viridis", 8)
     colors = viridis(4), viridis(2)
@@ -259,7 +261,9 @@ def lineplot_prediction(
                 else subpl_titles[i]
             )
             axs[2].plot(
-                data.mean(axis=1), color=colors[i], label=label_,
+                data.mean(axis=1),
+                color=colors[i],
+                label=label_,
             )
             axs[2].fill_between(
                 np.arange(data.shape[0]),
@@ -313,15 +317,16 @@ def lineplot_prediction(
     if outpath:
         fig.savefig(os.path.normpath(outpath), bbox_inches="tight", dpi=300)
     plt.show(block=True)
+    return fig
 
 
-def _permutation_wrapper(x, y, n_perm) -> Callable:
+def _permutation_wrapper(x, y, n_perm) -> tuple:
     """Wrapper for statannotations to convert pandas series to numpy array."""
     if isinstance(x, pd.Series):
         x = x.values
     if isinstance(y, pd.Series):
         y = y.values
-    return pte.stats.permutation_twosample(x, y, n_perm)
+    return pte.stats.permutation_twosample(x=x, y=y, n_perm=n_perm)
 
 
 def _add_median_labels(ax: axes.Axes, add_borders: bool = False) -> None:
@@ -420,7 +425,7 @@ def _single_lineplot(
     sfreq: Union[int, float],
     x_lims: tuple,
     color: tuple,
-    label: str,
+    label: Optional[str],
     subpl_title: str,
     p_lim: float,
     n_perm: int,
@@ -435,13 +440,6 @@ def _single_lineplot(
     )
 
     ax.plot(data.mean(axis=1), color=color, label=label)
-    ax.plot(
-        threshold_arr,
-        color="r",
-        label="Threshold",
-        alpha=0.5,
-        linestyle="dashed",
-    )
     ax.fill_between(
         np.arange(data.shape[0]),
         data.mean(axis=1) - data.std(axis=1),
@@ -449,6 +447,13 @@ def _single_lineplot(
         alpha=0.5,
         color=color,
         label=None,
+    )
+    ax.plot(
+        threshold_arr,
+        color="r",
+        label="Threshold",
+        alpha=0.5,
+        linestyle="dashed",
     )
 
     p_vals = pte.stats.timeseries_pvals(
