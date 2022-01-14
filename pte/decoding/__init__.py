@@ -5,7 +5,6 @@ from .experiment import Experiment
 from .experiment_factory import run_experiment
 from .load import (
     load_predictions,
-    load_predictions_timelocked,
     load_results,
     load_results_singlechannel,
 )

@@ -3,12 +3,14 @@
 from pathlib import Path
 from typing import Optional, Union
 
+import mne_bids
 import numpy as np
 import pandas as pd
 
 
 def get_bad_events(
-    bad_events_path: Optional[Union[Path, str]], fname: Union[Path, str]
+    bad_events_path: Optional[Union[Path, mne_bids.BIDSPath, str]],
+    fname: Union[Path, str],
 ) -> Optional[np.ndarray]:
     """Get DataFrame of bad events from bad events path."""
     if not bad_events_path:

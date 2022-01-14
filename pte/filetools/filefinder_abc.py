@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import os
+import pathlib
 from typing import List, Optional, Union
 
 import mne_bids
@@ -46,9 +47,9 @@ class FileFinder(ABC):
     @abstractmethod
     def find_files(
         self,
-        directory: str,
-        keywords: list = None,
-        extensions: list = None,
+        directory: Union[str, pathlib.Path],
+        keywords: Optional[Union[list, str]] = None,
+        extensions: Optional[list] = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -57,17 +58,19 @@ class FileFinder(ABC):
     @abstractmethod
     def filter_files(
         self,
-        keywords: list = None,
-        hemisphere: str = None,
-        stimulation: str = None,
-        medication: str = None,
-        exclude: str = None,
+        keywords: Optional[Union[str, list]] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[Union[str, list]] = None,
         verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
 
     @staticmethod
-    def _keyword_search(files: list, keywords: Union[str, list]) -> list:
+    def _keyword_search(
+        files: list[str], keywords: Optional[Union[str, list]]
+    ) -> list:
         if not keywords:
             return files
         if not isinstance(keywords, list):
@@ -83,8 +86,8 @@ class FileFinder(ABC):
     def _find_files(
         self,
         directory: str,
-        keywords: list = None,
-        extensions: list = None,
+        keywords: Optional[list] = None,
+        extensions: Optional[list] = None,
         verbose: bool = False,
     ) -> List[str]:
         """Find all files in directory with optional
@@ -103,7 +106,7 @@ class FileFinder(ABC):
             fnames = self._keyword_search(fnames, keywords)
             fnames = self._keyword_search(fnames, extensions)
             if fnames:
-                files.extend([file for file in fnames])
+                files.extend(fnames)
 
         if verbose:
             self._print_files(files)
@@ -111,17 +114,17 @@ class FileFinder(ABC):
 
     def _filter_files(
         self,
-        keywords: Optional[list] = None,
+        keywords: Optional[Union[str, list[str]]] = None,
         hemisphere: Optional[str] = None,
         stimulation: Optional[str] = None,
         medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        exclude: Optional[Union[str, list[str]]] = None,
         verbose: bool = False,
     ) -> List[str]:
         """Filter list of filepaths for given parameters and return filtered list."""
         filtered_files = self.files
         if exclude:
-            if isinstance(exclude, str):
+            if not isinstance(exclude, list):
                 exclude = [exclude]
             filtered_files = [
                 file
@@ -129,7 +132,7 @@ class FileFinder(ABC):
                 if not any(item in file for item in exclude)
             ]
         if keywords:
-            if isinstance(keywords, str):
+            if not isinstance(keywords, list):
                 keywords = [keywords]
             filtered_files = self._keyword_search(filtered_files, keywords)
         if stimulation:
@@ -152,7 +155,10 @@ class FileFinder(ABC):
             matching_files = []
             for file in filtered_files:
                 subject = mne_bids.get_entities_from_fname(file)["subject"]
-                if subject not in settings.ECOG_HEMISPHERES:
+                if (
+                    subject not in settings.ECOG_HEMISPHERES
+                    or settings.ECOG_HEMISPHERES[subject] is None
+                ):
                     raise HemisphereNotSpecifiedError(
                         subject, settings.ECOG_HEMISPHERES
                     )

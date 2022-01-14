@@ -1,9 +1,9 @@
 """Module for loading results from decoding experiments."""
 import json
 from pathlib import Path
-from typing import Iterable, Optional, Union
-import mne_bids
+from typing import Optional, Union
 
+import mne_bids
 import numpy as np
 import pandas as pd
 
@@ -15,8 +15,8 @@ def load_results_singlechannel(
     keywords: Optional[Union[str, list]] = None,
     scoring_key: str = "balanced_accuracy",
     average_runs: bool = False,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load prediciton results from *results.csv"""
+) -> pd.DataFrame:
+    """Load results from *results.csv"""
     # Create Dataframes from Files
     if not isinstance(files_or_dir, list):
         file_finder = pte.get_filefinder(datatype="any")
@@ -39,7 +39,7 @@ def load_results_singlechannel(
             usecols=["channel_name", scoring_key],
         )
         for ch_name in data.index.unique():
-            score = data.loc[ch_name].mean(numeric_only=True).values[0]
+            score = data.loc[ch_name].mean(numeric_only=True).values[0]  # type: ignore
             results.append([subject, ch_name, score])
     columns = [
         "Subject",
@@ -78,7 +78,7 @@ def load_results(
     results = []
     for file in files_or_dir:
         data_raw = pd.read_csv(file, index_col=[0], header=[0])
-        data = pd.melt(
+        data: pd.DataFrame = pd.melt(
             data_raw, id_vars=["channel_name"], value_vars=[scoring_key]
         )
         accuracies = []
@@ -88,7 +88,7 @@ def load_results(
                     "LFP" if "LFP" in ch_name else "ECOG",
                     data[data.channel_name == ch_name]
                     .mean(numeric_only=True)
-                    .value,
+                    .value,  # type: ignore
                 ]
             )
         df_acc = pd.DataFrame(accuracies, columns=["Channels", scoring_key])
@@ -142,92 +142,113 @@ def load_results(
     return df_average, df_raw
 
 
-def load_predictions_timelocked(
+def _handle_files_or_dir(
     files_or_dir: Union[str, list, Path],
-    sfreq: Optional[Union[int, float]] = None,
-    baseline: Union[bool, tuple] = None,
-    baseline_mode: str = "z-score",
-    channels: Iterable = ("ECOG", "LFP"),
     keywords: Optional[Union[str, list]] = None,
-    key_average: Optional[str] = None,
-):
-    """Load data from time-locked predictions."""
-    if not isinstance(files_or_dir, list):
-        file_finder = pte.get_filefinder(datatype="any")
-        file_finder.find_files(
-            directory=files_or_dir,
-            keywords=keywords,
-            extensions=["predictions_timelocked.json"],
-            verbose=True,
-        )
-        files_or_dir = file_finder.files
-    if baseline:
-        base_start, base_end = _handle_baseline(baseline, sfreq)
+) -> list:
+    """Handle different cases of files_or_dir."""
+    if isinstance(files_or_dir, list):
+        return files_or_dir
+    file_finder = pte.get_filefinder(datatype="any")
+    file_finder.find_files(
+        directory=files_or_dir,
+        keywords=keywords,
+        extensions=["predictions_timelocked.json"],
+        verbose=True,
+    )
+    return file_finder.files
 
-    data = {ch_name: {} for ch_name in channels}
-    for key, fpath in enumerate(files_or_dir):
-        if key_average:
-            key = mne_bids.get_entities_from_fname(fpath, on_error="ignore")[
-                key_average
+
+def _load_labels_single(
+    fpath: Union[str, Path],
+    baseline: Optional[
+        tuple[Optional[Union[int, float]], Optional[Union[int, float]]]
+    ],
+    baseline_mode: Optional[str],
+    base_start: Optional[int],
+    base_end: Optional[int],
+) -> pd.DataFrame:
+    """Load time-locked predictions from single file."""
+    entities = mne_bids.get_entities_from_fname(fpath, on_error="ignore")
+    with open(fpath, "r", encoding="utf-8") as file:
+        data = json.load(file)
+
+    label_name = data["TargetName"]
+    label_arr = np.stack(data["Target"], axis=0)
+
+    if baseline is not None:
+        label_arr = _baseline_correct(
+            label_arr, baseline_mode, base_start, base_end
+        )
+
+    labels = pd.DataFrame(
+        data=[
+            [
+                entities["subject"],
+                entities["session"],
+                entities["task"],
+                entities["run"],
+                entities["acquisition"],
+                label_name,
+                label_arr,
             ]
-        with open(fpath, "r", encoding="utf-8") as file:
-            preds = json.load(file)
-        for ch_name in channels:
-            if key not in data[ch_name]:
-                data[ch_name][key] = []
-            pred = np.mean(np.stack(preds[ch_name], axis=0), axis=0)
-            if baseline:
-                if baseline_mode == "std":
-                    pred = pred / np.std(pred[base_start:base_end])
-                else:  # baseline_mode == "z-score"
-                    pred = (pred - np.mean(pred[base_start:base_end])) / (
-                        np.std(pred[base_start:base_end])
-                    )
-            data[ch_name][key].append(pred)
-    data_outer = []
-    for _, value in data.items():
-        data_inner = []
-        for _, j in value.items():
-            data_inner.append(np.array(j).mean(axis=0))
-        data_outer.append(data_inner)
-    data_outer = np.array(data_outer)
-    return data_outer
+        ],
+        columns=[
+            "Subject",
+            "Session",
+            "Task",
+            "Run",
+            "Acquisition",
+            "Channel Name",
+            "Data",
+        ],
+    )
+    return labels
 
 
 def load_predictions(
     files_or_dir: Union[str, list, Path],
+    mode: str = "predictions",
     sfreq: Optional[Union[int, float]] = None,
-    baseline: Union[bool, tuple] = None,
+    baseline: Optional[
+        tuple[Optional[Union[int, float]], Optional[Union[int, float]]]
+    ] = None,
     baseline_mode: str = "z-score",
-    keywords: Optional[Union[str, list]] = None,
     average_predictions: bool = False,
     concatenate_runs: bool = True,
     average_runs: bool = False,
+    keywords: Optional[Union[str, list]] = None,
 ) -> pd.DataFrame:
-    """Load data from time-locked predictions."""
-    if not isinstance(files_or_dir, list):
-        file_finder = pte.get_filefinder(datatype="any")
-        file_finder.find_files(
-            directory=files_or_dir,
-            keywords=keywords,
-            extensions=["predictions_timelocked.json"],
-            verbose=True,
-        )
-        files_or_dir = file_finder.files
-    if baseline:
-        base_start, base_end = _handle_baseline(baseline, sfreq)
-    else:
-        base_start, base_end = None, None
+    """Load time-locked predictions."""
+    files_or_dir = _handle_files_or_dir(
+        files_or_dir=files_or_dir, keywords=keywords
+    )
+
+    base_start, base_end = _handle_baseline(baseline=baseline, sfreq=sfreq)
 
     df_list = []
     for fpath in files_or_dir:
-        df_single = _load_predictions_single(
-            fpath=fpath,
-            baseline=baseline,
-            baseline_mode=baseline_mode,
-            base_start=base_start,
-            base_end=base_end,
-        )
+        if mode == "predictions":
+            df_single: pd.DataFrame = _load_predictions_single(
+                fpath=fpath,
+                baseline=baseline,
+                baseline_mode=baseline_mode,
+                base_start=base_start,
+                base_end=base_end,
+            )
+        elif mode == "targets":
+            df_single: pd.DataFrame = _load_labels_single(
+                fpath=fpath,
+                baseline=baseline,
+                baseline_mode=baseline_mode,
+                base_start=base_start,
+                base_end=base_end,
+            )
+        else:
+            raise ValueError(
+                "`mode` must be one of either `targets` or "
+                f"`predictions. Got: {mode}."
+            )
         if average_predictions:
             df_single["Data"] = (
                 df_single["Data"]
@@ -235,7 +256,7 @@ def load_predictions(
                 .apply(np.expand_dims, axis=0)
             )
         df_list.append(df_single)
-    df_all = pd.concat(df_list)
+    df_all: pd.DataFrame = pd.concat(objs=df_list)
     if concatenate_runs:
         df_all = _concatenate_runs(data=df_all)
     if average_runs:
@@ -252,7 +273,7 @@ def _concatenate_runs(data: pd.DataFrame):
         dat_sub = data[data["Subject"] == subject]
         for ch_name in dat_sub["Channel Name"].unique():
             dat_concat = np.vstack(
-                dat_sub["Data"][dat_sub["Channel Name"] == ch_name].values
+                dat_sub["Data"][dat_sub["Channel Name"] == ch_name].to_numpy()
             )
             data_list.append([subject, ch_name, dat_concat])
     return pd.DataFrame(data_list, columns=["Subject", "Channel Name", "Data"])
@@ -260,9 +281,11 @@ def _concatenate_runs(data: pd.DataFrame):
 
 def _load_predictions_single(
     fpath: Union[str, Path],
-    baseline: Union[bool, tuple],
+    baseline: Optional[
+        tuple[Optional[Union[int, float]], Optional[Union[int, float]]]
+    ],
     baseline_mode: str,
-    base_start: int,
+    base_start: Optional[int],
     base_end: Optional[int],
 ) -> pd.DataFrame:
     """Load time-locked predictions from single file."""
@@ -270,30 +293,26 @@ def _load_predictions_single(
     with open(fpath, "r", encoding="utf-8") as file:
         preds = json.load(file)
     data_list = []
-    for ch_name, pred in [
-        (ch_name, pred)
-        for ch_name, pred in preds.items()
-        if any([keyw in ch_name for keyw in ["ECOG", "LFP"]])
-    ]:
-        pred_arr = np.stack(pred, axis=0)
-        if baseline:
-            pred_arr = _baseline_correct(
-                pred_arr, baseline_mode, base_start, base_end
+    for ch_name in preds.keys():
+        if any(keyw in ch_name for keyw in ["ECOG", "LFP"]):
+            pred_arr = np.stack(preds[ch_name], axis=0)
+            if baseline:
+                pred_arr = _baseline_correct(
+                    pred_arr, baseline_mode, base_start, base_end
+                )
+            data_list.append(
+                [
+                    entities["subject"],
+                    entities["session"],
+                    entities["task"],
+                    entities["run"],
+                    entities["acquisition"],
+                    ch_name,
+                    pred_arr,
+                ]
             )
-
-        data_list.append(
-            [
-                entities["subject"],
-                entities["session"],
-                entities["task"],
-                entities["run"],
-                entities["acquisition"],
-                ch_name,
-                pred_arr,
-            ]
-        )
     data = pd.DataFrame(
-        data_list,
+        data=data_list,
         columns=[
             "Subject",
             "Session",
@@ -308,12 +327,17 @@ def _load_predictions_single(
 
 
 def _handle_baseline(
-    baseline: Optional[tuple], sfreq: Optional[Union[int, float]]
-):
+    baseline: Optional[
+        tuple[Optional[Union[int, float]], Optional[Union[int, float]]]
+    ],
+    sfreq: Optional[Union[int, float]],
+) -> tuple[Optional[int], Optional[int]]:
     """Return baseline start and end values for given baseline and sampling frequency."""
+    if not baseline:
+        return None, None
     if any(baseline) and not sfreq:
         raise ValueError(
-            "If `baseline` is any value other than `None`, `False` or `(None, None)`, `sfreq` must be provided."
+            "If `baseline` is any value other than `None`, or `(None, None)`, `sfreq` must be provided."
         )
     if not sfreq:
         sfreq = 0.0
@@ -333,13 +357,18 @@ def _baseline_correct(
     baseline_mode: str,
     base_start: Optional[int],
     base_end: Optional[int],
-):
+) -> np.ndarray:
     """Baseline correct data."""
     data = data.T
-    if baseline_mode == "std":
-        data_corr = data / np.std(data[base_start:base_end], axis=0)
-    else:  # baseline_mode == "z-score"
-        data_corr = (data - np.mean(data[base_start:base_end], axis=0)) / (
+    if baseline_mode == "z-score":
+        data = (data - np.mean(data[base_start:base_end], axis=0)) / (
             np.std(data[base_start:base_end], axis=0)
         )
-    return data_corr.T
+        return data.T
+    if baseline_mode == "std":
+        data = data / np.std(data[base_start:base_end], axis=0)
+        return data.T
+    raise ValueError(
+        "`baseline_mode` must be one of either `std` or `z-score`."
+        f" Got: {baseline_mode}."
+    )

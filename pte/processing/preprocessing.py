@@ -31,6 +31,47 @@ def references_from_nm_channels(
     return anodes, cathodes, ch_names
 
 
+def bandstop_filter(
+    raw: mne.io.BaseRaw,
+    bandstop_freq: Optional[Union[str, int, float, np.ndarray]] = "auto",
+    fname: Optional[str] = None,
+) -> mne.io.BaseRaw:
+    """Bandstop filter Raw data"""
+    if bandstop_freq is None:
+        return raw
+
+    if isinstance(bandstop_freq, str):
+        if bandstop_freq != "auto":
+            raise ValueError(
+                "`bandstop_freq` must be one of either `string`"
+                f"`float`, `'auto'` or `None`. Got: {bandstop_freq}."
+            )
+        if not fname:
+            try:
+                fnames = raw.filenames
+                fname = raw.filenames[0]
+            except ValueError:
+                raise ValueError(
+                    "If `bandstop_freq` is `'auto'`, `fname` must be provided."
+                )
+        if "StimOn" not in fname:
+            return raw
+        bandstop_freq = 130
+
+    if isinstance(bandstop_freq, (int, float)):
+        bandstop_freq = np.arange(
+            bandstop_freq, raw.info["sfreq"] / 2, bandstop_freq
+        )
+
+    if bandstop_freq:
+        print("FREQUENCIES:", bandstop_freq)
+        raw = raw.notch_filter(
+            bandstop_freq, notch_widths=bandstop_freq * 0.2, verbose=True
+        )
+
+    return raw
+
+
 def preprocess(
     raw: mne.io.BaseRaw,
     nm_channels_dir: Path,
@@ -42,8 +83,10 @@ def preprocess(
     """Preprocess data"""
     if not line_freq:
         line_freq = raw.info["line_freq"]
-    if not fname:
+    if fname is None:
         fname = raw.filenames[0]
+    elif isinstance(fname, Path):
+        fname = str(fname)
 
     raw = raw.pick(picks=["ecog", "dbs"], verbose=False)
     raw = raw.load_data(verbose=False)
@@ -51,18 +94,7 @@ def preprocess(
     notch_freqs = np.arange(line_freq, raw.info["sfreq"] / 2, line_freq)
     raw = raw.notch_filter(notch_freqs, verbose=False)
 
-    if bandstop_freq == "auto":
-        if "StimOn" in fname:
-            bandstop_freq = 130
-        else:
-            bandstop_freq = None
-
-    if isinstance(bandstop_freq, (int, float)):
-        bandstop_freq = np.arange(bandstop_freq, raw.info["sfreq"] / 2, 130)
-
-    if bandstop_freq:
-        raw = raw.notch_filter(bandstop_freq, notch_widths=bandstop_freq * 0.2)
-        raw.plot_psd()
+    raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
 
     raw = raw.set_eeg_reference(
         ref_channels="average", ch_type="ecog", verbose=False
