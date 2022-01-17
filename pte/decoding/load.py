@@ -360,7 +360,7 @@ def _baseline_correct(
 ) -> np.ndarray:
     """Baseline correct data."""
     data = data.T
-    if baseline_mode == "z-score":
+    if baseline_mode == "zscore":
         data = (data - np.mean(data[base_start:base_end], axis=0)) / (
             np.std(data[base_start:base_end], axis=0)
         )
@@ -369,6 +369,6 @@ def _baseline_correct(
         data = data / np.std(data[base_start:base_end], axis=0)
         return data.T
     raise ValueError(
-        "`baseline_mode` must be one of either `std` or `z-score`."
+        "`baseline_mode` must be one of either `std` or `zscore`."
         f" Got: {baseline_mode}."
     )

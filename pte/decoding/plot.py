@@ -6,6 +6,7 @@ from typing import Callable, Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
+from scipy import stats
 import seaborn as sns
 from matplotlib import axes, cm, collections, figure, patheffects
 from matplotlib import pyplot as plt
@@ -13,6 +14,112 @@ from statannotations import Annotator
 from statannotations.stats import StatTest
 
 import pte
+
+
+def violinplot_results(
+    data: pd.DataFrame,
+    outpath: Union[str, Path],
+    x: str,
+    y: str,
+    hue: Optional[str] = None,
+    order: Optional[Iterable] = None,
+    hue_order: Optional[Iterable] = None,
+    stat_test: Optional[Union[Callable, str]] = "Permutation",
+    alpha: Optional[float] = 0.05,
+    add_lines: Optional[str] = None,
+    title: Optional[str] = "Classification Performance",
+    figsize: Union[tuple, str] = "auto",
+) -> None:
+    """Plot performance as combined boxplot and stripplot."""
+    # data = data[["Channels", "Balanced Accuracy", "Subject"]]
+
+    color = "black"
+    alpha_box = 0.5
+
+    if not order:
+        order = data[x].unique()
+
+    if hue and not hue_order:
+        hue_order = data[hue].unique()
+
+    if figsize == "auto":
+        hue_factor = 1 if not hue else len(hue_order)
+        figsize = (1.1 * len(order) * hue_factor, 4)
+
+    # plt.figure(figsize=figsize)
+
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
+
+    ax = sns.violinplot(
+        x=x,
+        y=y,
+        hue=hue,
+        order=order,
+        hue_order=hue_order,
+        data=data,
+        palette="viridis",
+        inner="box",
+        width=0.9,
+        alpha=0.8,
+        ax=ax,
+    )
+
+    ax = sns.swarmplot(
+        x=x,
+        y=y,
+        hue=hue,
+        order=order,
+        hue_order=hue_order,
+        data=data,
+        color="white",
+        alpha=0.5,
+        dodge=True,
+        s=6,
+        ax=ax,
+    )
+
+    if stat_test:
+        _add_stats(
+            ax=ax,
+            data=data,
+            x=x,
+            y=y,
+            order=order,
+            hue=hue,
+            hue_order=hue_order,
+            stat_test=stat_test,
+            alpha=alpha,
+            location="outside",
+        )
+
+    if hue:
+        handles, labels = ax.get_legend_handles_labels()
+        new_labels = [
+            label.replace(" ", "\n") for label in labels[: len(labels) // 2]
+        ]
+        _ = plt.legend(
+            handles[: len(handles) // 2],
+            new_labels,
+            bbox_to_anchor=(1.02, 1),
+            loc=2,
+            borderaxespad=0.0,
+            title=hue,
+            labelspacing=0.7,
+        )
+
+    xlabels = [item.get_text() for item in ax.get_xticklabels()]
+    new_xlabels = [xtick.replace(" ", "\n") for xtick in xlabels]
+    ax.set_xticklabels(new_xlabels)
+    ax.set_title(title, fontsize="medium", y=1.02)
+
+    if add_lines:
+        _add_lines(
+            ax=ax, data=data, x=x, y=y, order=order, add_lines=add_lines
+        )
+
+    fig.tight_layout()
+    fig.savefig(outpath, bbox_inches="tight", dpi=450)
+    plt.show(block=True)
 
 
 def boxplot_results(
@@ -77,7 +184,7 @@ def boxplot_results(
     if add_median_labels:
         _add_median_labels(ax)
 
-    sns.stripplot(
+    sns.swarmplot(
         x=x,
         y=y,
         hue=hue,
@@ -86,8 +193,7 @@ def boxplot_results(
         data=data,
         palette="viridis",
         dodge=True,
-        jitter=1.0,
-        s=7,
+        s=6,
         ax=ax,
     )
 
@@ -165,6 +271,7 @@ def _add_stats(
     hue_order: Optional[Iterable],
     stat_test: Union[str, StatTest.StatTest],
     alpha: float,
+    location: str = "inside",
 ):
     """Perform statistical test and annotate graph."""
     if not hue:
@@ -199,7 +306,7 @@ def _add_stats(
         alpha=alpha,
         test=stat_test,
         text_format="simple",
-        loc="inside",
+        loc=location,
         color="grey",
     )
     annotator.apply_and_annotate()
@@ -267,8 +374,8 @@ def lineplot_prediction(
             )
             axs[2].fill_between(
                 np.arange(data.shape[0]),
-                data.mean(axis=1) - data.std(axis=1),
-                data.mean(axis=1) + data.std(axis=1),
+                data.mean(axis=1) - stats.sem(data, axis=1),
+                data.mean(axis=1) + stats.sem(data, axis=1),
                 alpha=0.5,
                 color=colors[i],
             )
@@ -442,8 +549,8 @@ def _single_lineplot(
     ax.plot(data.mean(axis=1), color=color, label=label)
     ax.fill_between(
         np.arange(data.shape[0]),
-        data.mean(axis=1) - data.std(axis=1),
-        data.mean(axis=1) + data.std(axis=1),
+        data.mean(axis=1) - stats.sem(data, axis=1),
+        data.mean(axis=1) + stats.sem(data, axis=1),
         alpha=0.5,
         color=color,
         label=None,

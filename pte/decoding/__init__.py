@@ -8,5 +8,5 @@ from .load import (
     load_results,
     load_results_singlechannel,
 )
-from .plot import boxplot_results, lineplot_prediction
+from .plot import boxplot_results, lineplot_prediction, violinplot_results
 from .timepoint import get_earliest_timepoint
