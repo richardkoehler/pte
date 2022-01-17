@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass, field
 import os
-from typing import List
+from pathlib import Path
+from typing import Optional, Union
 
 import mne_bids
 
@@ -15,9 +16,9 @@ class DefaultFinder(FileFinder):
 
     def find_files(
         self,
-        directory: str,
-        keywords: list = None,
-        extensions: list = None,
+        directory: Union[Path, str],
+        keywords: Optional[Union[list[str], str]] = None,
+        extensions: Optional[Union[list[str], str]] = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -29,10 +30,12 @@ class DefaultFinder(FileFinder):
             extensions (list): e.g. [".json" or "tsv"] (optional)
             verbose (bool): verbosity level (optional, default=True)
         """
-        if not os.path.isdir(directory):
-            raise DirectoryNotFoundError(directory)
-        self.directory = directory
-        self.files = self._find_files(directory, keywords, extensions, verbose)
+        self.directory = Path(directory)
+        if not self.directory.is_dir():
+            raise DirectoryNotFoundError(self.directory)
+        self.files = self._find_files(self.directory, keywords, extensions)
+        if verbose:
+            print(self)
 
     def filter_files(
         self,
@@ -50,8 +53,9 @@ class DefaultFinder(FileFinder):
             stimulation=stimulation,
             medication=medication,
             exclude=exclude,
-            verbose=verbose,
         )
+        if verbose:
+            print(self)
 
 
 @dataclass
@@ -78,7 +82,7 @@ class BIDSFinder(FileFinder):
             verbose (bool): verbosity level (optional, default=True)
         """
         self.directory = directory
-        files = self._find_files(self.directory, keywords, extensions, verbose)
+        files = self._find_files(self.directory, keywords, extensions)
         self.files = self._make_bids_paths(files)
 
     def filter_files(
@@ -98,13 +102,14 @@ class BIDSFinder(FileFinder):
             stimulation=stimulation,
             medication=medication,
             exclude=exclude,
-            verbose=verbose,
         )
         self.files = self._make_bids_paths(self.files)
+        if verbose:
+            print(self)
 
     def _make_bids_paths(
-        self, filepaths: List[str]
-    ) -> List[mne_bids.BIDSPath]:
+        self, filepaths: list[str]
+    ) -> list[mne_bids.BIDSPath]:
 
         """Create list of mne-bids BIDSPath objects from list of filepaths."""
         bids_paths = []

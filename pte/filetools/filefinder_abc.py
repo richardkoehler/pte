@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import os
-import pathlib
+from pathlib import Path
 from typing import List, Optional, Union
 
 import mne_bids
@@ -15,7 +15,7 @@ from .. import settings
 class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
-    directory: str = field(init=False)
+    directory: Union[Path, str] = field(init=False)
     files: list = field(init=False, default_factory=list)
 
     def __str__(self):
@@ -47,9 +47,9 @@ class FileFinder(ABC):
     @abstractmethod
     def find_files(
         self,
-        directory: Union[str, pathlib.Path],
+        directory: Union[str, Path],
         keywords: Optional[Union[list, str]] = None,
-        extensions: Optional[list] = None,
+        extensions: Optional[Union[list, str]] = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -80,15 +80,11 @@ class FileFinder(ABC):
         ]
         return filtered_files
 
-    def _print_files(self, files: Optional[list]) -> None:
-        print(self)
-
     def _find_files(
         self,
-        directory: str,
-        keywords: Optional[list] = None,
-        extensions: Optional[list] = None,
-        verbose: bool = False,
+        directory: Union[Path, str],
+        keywords: Optional[Union[list, str]] = None,
+        extensions: Optional[Union[list, str]] = None,
     ) -> List[str]:
         """Find all files in directory with optional
         keywords and extensions.
@@ -108,8 +104,6 @@ class FileFinder(ABC):
             if fnames:
                 files.extend(fnames)
 
-        if verbose:
-            self._print_files(files)
         return files
 
     def _filter_files(
@@ -119,7 +113,6 @@ class FileFinder(ABC):
         stimulation: Optional[str] = None,
         medication: Optional[str] = None,
         exclude: Optional[Union[str, list[str]]] = None,
-        verbose: bool = False,
     ) -> List[str]:
         """Filter list of filepaths for given parameters and return filtered list."""
         filtered_files = self.files
@@ -169,8 +162,6 @@ class FileFinder(ABC):
                     matching_files.append(file)
             filtered_files = matching_files
         self.files = filtered_files
-        if verbose:
-            self._print_files(filtered_files)
         return filtered_files
 
 
@@ -183,7 +174,7 @@ class DirectoryNotFoundError(Exception):
 
     def __init__(
         self,
-        directory,
+        directory: Union[Path, str],
         message="Input directory was not found.",
     ):
         self.directory = directory
