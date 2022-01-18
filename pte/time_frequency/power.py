@@ -1,7 +1,4 @@
-"""Module for power calculation."""
-
-
-import inspect
+"""Functions for calculating and handling band-power."""
 from pathlib import Path
 from typing import Optional, Union
 
@@ -12,31 +9,191 @@ import numpy as np
 import pte
 
 
+def apply_baseline(
+    power: mne.time_frequency.AverageTFR,
+    baseline: Optional[
+        Union[
+            tuple[Optional[Union[int, float]], Optional[Union[int, float]]],
+            np.ndarray,
+        ]
+    ] = (None, None),
+    baseline_mode: str = "zscore",
+):
+    """Apply baseline correction given interval or custom values."""
+    if not isinstance(baseline, np.ndarray):
+        return power.apply_baseline(
+            baseline=baseline, mode=baseline_mode, verbose=False
+        )
+    return _apply_baseline_array(
+        power=power, baseline=baseline, mode=baseline_mode
+    )
+
+
+# This code is adapted from MNE-Python version 0.24.1 (mne.baseline.rescale())
+def _apply_baseline_array(
+    power: mne.time_frequency.AverageTFR,
+    baseline: np.ndarray,
+    mode: str,
+) -> mne.time_frequency.AverageTFR:
+    """Apply baseline correction given array."""
+    data = power.data.copy()
+    test_2 = data.copy()
+    if not baseline.ndim == data.ndim:
+        raise ValueError(
+            "If `baseline` is an array of values, it must have"
+            " the same number of dimensions as `power`. Number of dimensions"
+            f" `baseline`: {baseline.ndim}. Number of dimensions `power`:"
+            f" {data.ndim}."
+        )
+    mean = np.mean(data, axis=-1, keepdims=True)
+
+    if mode == "mean":
+
+        def fun(d, m):
+            d -= m
+
+    elif mode == "ratio":
+
+        def fun(d, m):
+            d /= m
+
+    elif mode == "logratio":
+
+        def fun(d, m):
+            d /= m
+            np.log10(d, out=d)
+
+    elif mode == "percent":
+
+        def fun(d, m):
+            d -= m
+            d /= m
+
+    elif mode == "zscore":
+
+        def fun(d, m):
+            d -= m
+            d /= np.std(d, axis=-1, keepdims=True)
+
+    elif mode == "zlogratio":
+
+        def fun(d, m):
+            d /= m
+            np.log10(d, out=d)
+            d /= np.std(d, axis=-1, keepdims=True)
+
+    else:
+        raise ValueError(f"Unknown baseline correction mode: {mode}.")
+
+    fun(data, mean)
+
+    power.data = power.data - data
+
+    test = power.data
+
+    return power
+
+
+# This code is adapted from MNE-Python version 0.24.1 (mne.baseline.rescale())
+def _get_baseline_indices(
+    baseline: tuple[Optional[Union[int, float]], Optional[Union[int, float]]],
+    times: np.ndarray,
+) -> tuple[int, int]:
+    """Get baseline indices from times array."""
+    bmin, bmax = baseline
+    if bmin is None:
+        imin = 0
+    else:
+        imin = np.where(times >= bmin)[0]
+        if len(imin) == 0:
+            raise ValueError(
+                f"bmin is too large {bmin}, it exceeds the largest"
+                " time value."
+            )
+        imin = int(imin[0])
+    if bmax is None:
+        imax = len(times)
+    else:
+        imax = np.where(times <= bmax)[0]
+        if len(imax) == 0:
+            raise ValueError(
+                f"bmax is too small {bmax}, it is smaller than the"
+                " smallest time value."
+            )
+        imax = int(imax[-1]) + 1
+    if imin >= imax:
+        raise ValueError(
+            f"Bad rescaling slice ({imin}:{imax}) from time values"
+            f" {bmin}, {bmax}."
+        )
+    return imin, imax
+
+
+def get_baseline(
+    powers: list[mne.time_frequency.AverageTFR],
+    picks: Union[str, list[str], slice],
+    baseline: tuple[
+        Optional[Union[int, float]], Optional[Union[int, float]]
+    ] = (None, None),
+) -> list[np.ndarray]:
+    """Get baseline array of given list of AverageTFRs."""
+    if not isinstance(powers, list):
+        powers = [powers]
+
+    baselines = []
+    for power in powers:
+        baseline_array = power.copy().pick(picks=picks)
+        imin, imax = _get_baseline_indices(
+            baseline=baseline, times=power.times
+        )
+        baseline_array = power.data[..., imin:imax]
+        baselines.append(baseline_array)
+
+    return baselines
+
+
 def average_power(
     powers: Union[
-        list[mne.time_frequency.AverageTFR],
-        list[mne.time_frequency.AverageTFR],
+        list[mne.time_frequency.AverageTFR], mne.time_frequency.AverageTFR
     ],
     picks: Union[str, list[str], slice],
     baseline: Optional[
-        tuple[Optional[Union[int, float]], Optional[Union[int, float]]]
+        Union[
+            tuple[Optional[Union[int, float]], Optional[Union[int, float]]],
+            list[np.ndarray],
+        ]
     ] = (None, None),
-    baseline_mode: Optional[str] = "zscore",
+    baseline_mode: str = "zscore",
     clip: Optional[Union[int, float]] = None,
 ) -> mne.time_frequency.AverageTFR:
     """Return power averaged over given channel types or picks."""
     if not isinstance(powers, list):
         powers = [powers]
+    if isinstance(baseline, np.ndarray):
+        baseline = [baseline]
+    if isinstance(baseline, list):
+        if not len(baseline) == len(powers):
+            raise ValueError(
+                "If numpy arrays are provided for"
+                "c ustom baseline correction, the same number of numpy arrays"
+                " and `power` (TFR) objects must be provided. Got:"
+                f" {len(baseline)} baseline arrays and {len(powers)} powers."
+            )
+
     power_all = None
     power_all_files = []
     for power in powers:
         power = power.copy().pick(picks=picks)
         if baseline:
-            power = power.apply_baseline(
-                baseline=baseline, mode=baseline_mode, verbose=False
-            )
+            if not isinstance(baseline, list):
+                _baseline = baseline
+            else:
+                _baseline = baseline
+            power = apply_baseline(
+                power=power, baseline=_baseline, baseline_mode=baseline_mode
+            )  # type: ignore
         df_power = power.to_data_frame(picks=picks)
-        freqs = power.freqs
+        freqs = power.freqs  # type: ignore
         power_all_freqs = []
         for freq in freqs:
             power_single_freq = (
@@ -220,22 +377,32 @@ def power_from_bids(
     kwargs_preprocess: Optional[dict] = None,
     kwargs_epochs: Optional[dict] = None,
     kwargs_power: Optional[dict] = None,
-) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
+) -> Optional[
+    Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]
+]:
     """Calculate power from single file."""
     print(f"File: {file.basename}")
     raw = mne_bids.read_raw_bids(file, verbose=False)
 
-    if kwargs_preprocess:
-        raw = pte.processing.preprocess(
-            raw=raw,
-            nm_channels_dir=nm_channels_dir,
-            **kwargs_preprocess,
-        )
-    else:
-        raw = pte.processing.preprocess(
-            raw=raw,
-            nm_channels_dir=nm_channels_dir,
-        )
+    try:
+        if kwargs_preprocess:
+            raw = pte.processing.preprocess(
+                raw=raw,
+                nm_channels_dir=nm_channels_dir,
+                pick_used_channels=True,
+                **kwargs_preprocess,
+            )
+        else:
+            raw = pte.processing.preprocess(
+                raw=raw,
+                pick_used_channels=True,
+                nm_channels_dir=nm_channels_dir,
+            )
+    except ValueError as error:
+        if "No valid channels found" not in str(error):
+            raise
+        print(error)
+        return None
 
     if kwargs_epochs:
         epochs = epochs_from_raw(

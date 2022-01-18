@@ -9,9 +9,30 @@ import numpy as np
 import pandas as pd
 
 
-def references_from_nm_channels(
+def pick_by_nm_channels(
+    raw: mne.io.BaseRaw,
     nm_channels_dir: Union[Path, str],
     fname: mne_bids.BIDSPath,
+) -> mne.io.BaseRaw:
+    """Pick channels (``used`` and ``good``) according to *nm_channels.csv."""
+    raw = raw.copy()
+    basename = str(Path(fname).stem)
+    fpath = Path(nm_channels_dir) / Path(basename + "_nm_channels.csv")
+    nm_channels: pd.DataFrame = pd.read_csv(fpath, header=0)
+    channel_picks = nm_channels[
+        (nm_channels["used"] == 1) & (nm_channels["status"] == "good")
+    ]
+    if len(channel_picks) == 0:
+        raise ValueError(
+            "No valid channels found in given nm_channels.csv file:"
+            f" {fpath.name}"
+        )
+    return raw.pick_channels(ch_names=channel_picks["name"].to_list())
+
+
+def references_from_nm_channels(
+    nm_channels_dir: Union[Path, str],
+    fname: Union[Path, str, mne_bids.BIDSPath],
     types: Union[str, list] = "dbs",
 ) -> tuple[list, list, list]:
     """Get referencing montage from *nm_channels.csv file."""
@@ -79,7 +100,8 @@ def preprocess(
     fname: Optional[Union[str, Path]] = None,
     resample_freq: Optional[Union[int, float]] = 500,
     bandstop_freq: Optional[Union[str, int, float, np.ndarray]] = "auto",
-) -> mne.io.BaseRaw:
+    pick_used_channels: bool = False,
+) -> Optional[mne.io.BaseRaw]:
     """Preprocess data"""
     if not line_freq:
         line_freq = raw.info["line_freq"]
@@ -102,12 +124,21 @@ def preprocess(
     anodes, cathodes, ch_names = references_from_nm_channels(
         nm_channels_dir=nm_channels_dir, fname=fname
     )
-    raw = mne.set_bipolar_reference(
-        raw,
-        anode=anodes,
-        cathode=cathodes,
-        ch_name=ch_names,
-        drop_refs=True,
-    )
+    if not ch_names:
+        print("No channels given for bipolar re-referencing.")
+    else:
+        raw = mne.set_bipolar_reference(
+            raw,
+            anode=anodes,
+            cathode=cathodes,
+            ch_name=ch_names,
+            drop_refs=True,
+        )
+
+    if pick_used_channels:
+        raw = pick_by_nm_channels(
+            raw=raw, nm_channels_dir=nm_channels_dir, fname=fname
+        )
+
     raw = raw.reorder_channels(sorted(raw.ch_names))
     return raw
