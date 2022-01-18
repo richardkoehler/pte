@@ -182,7 +182,7 @@ def average_power(
 
     power_all = None
     power_all_files = []
-    for ind, power in enumerate(powers):
+    for power in powers:
         power = power.copy().pick(picks=picks)
         if baseline:
             if not isinstance(baseline, list):
@@ -377,22 +377,32 @@ def power_from_bids(
     kwargs_preprocess: Optional[dict] = None,
     kwargs_epochs: Optional[dict] = None,
     kwargs_power: Optional[dict] = None,
-) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
+) -> Optional[
+    Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]
+]:
     """Calculate power from single file."""
     print(f"File: {file.basename}")
     raw = mne_bids.read_raw_bids(file, verbose=False)
 
-    if kwargs_preprocess:
-        raw = pte.processing.preprocess(
-            raw=raw,
-            nm_channels_dir=nm_channels_dir,
-            **kwargs_preprocess,
-        )
-    else:
-        raw = pte.processing.preprocess(
-            raw=raw,
-            nm_channels_dir=nm_channels_dir,
-        )
+    try:
+        if kwargs_preprocess:
+            raw = pte.processing.preprocess(
+                raw=raw,
+                nm_channels_dir=nm_channels_dir,
+                pick_used_channels=True,
+                **kwargs_preprocess,
+            )
+        else:
+            raw = pte.processing.preprocess(
+                raw=raw,
+                pick_used_channels=True,
+                nm_channels_dir=nm_channels_dir,
+            )
+    except ValueError as error:
+        if "No valid channels found" not in str(error):
+            raise
+        print(error)
+        return None
 
     if kwargs_epochs:
         epochs = epochs_from_raw(
