@@ -1,23 +1,21 @@
 """Module for running decoding experiments."""
-import os
-import sys
 from pathlib import Path
-from joblib import Parallel, delayed
-from typing import Iterable, Optional, Sequence, Union
+from typing import Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
+from py_neuromodulation import nm_analysis
 
 import pte
-from .experiment import Experiment
-from .decode import get_decoder
-
-from py_neuromodulation import nm_analysis
+from pte.decoding import Experiment
 
 
 def run_experiment(
     feature_root: Union[Path, str],
-    feature_files: Union[Path, str, list[Union[Path, str]]],
+    feature_files: Union[
+        Path, str, list[Path], list[str], list[Union[Path, str]]
+    ],
     n_jobs: int = 1,
     **kwargs,
 ) -> list[Optional[Experiment]]:
@@ -105,7 +103,7 @@ def _run_single_experiment(
     )
     print("Target channels found:", target_series.name)
 
-    features_df = _get_feature_df(features, use_features, use_times)
+    features_df = get_feature_df(features, use_features, use_times)
 
     # Pick artifact channel
     if artifact_channels:
@@ -115,6 +113,7 @@ def _run_single_experiment(
         ).to_numpy()
     else:
         artifacts = None
+
     # Generate output file name
     out_path = _generate_outpath(
         out_root,
@@ -129,14 +128,14 @@ def _run_single_experiment(
 
     dist_end = _handle_exception_files(
         fullpath=out_path,
-        exception_files=exceptions,
         dist_end=dist_end,
         excep_dist_end=excep_dist_end,
+        exception_files=exceptions,
     )
 
     side = "right" if "R_" in str(out_path) else "left"
 
-    decoder = get_decoder(
+    decoder = pte.decoding.get_decoder(
         classifier=classifier,
         scoring=scoring,
         balancing=balancing,
@@ -171,37 +170,22 @@ def _run_single_experiment(
         **kwargs,
     )
     experiment.run()
-    experiment.save(path=out_path)
+    experiment.save_results(path=out_path)
+    # experiment.fit_and_save(path=out_path)
+
     return experiment
-
-
-def _get_label(
-    label_channels: list[str],
-    features: pd.DataFrame,
-    nm_reader: nm_analysis.Feature_Reader,
-) -> pd.Series:
-    """Read label DataFrame from given file."""
-    for label_channel in label_channels:
-        if label_channel in features.columns:
-            label_data = nm_reader.read_target_ch(
-                feature_arr=features,
-                label_name=label_channel,
-                binarize=False,
-            )
-            return pd.Series(label_data, name=label_channel)
-    raise ValueError(f"No valid label found. Labels given: {label_channels}.")
 
 
 def _handle_exception_files(
     fullpath: Union[Path, str],
-    exception_files: Optional[Iterable],
     dist_end: Union[int, float],
     excep_dist_end: Union[int, float],
+    exception_files: Optional[Sequence] = None,
 ):
     """Check if current file is listed in exception files."""
     if exception_files:
         if any(exc in str(fullpath) for exc in exception_files):
-            print("Exception file recognized: ", os.path.basename(fullpath))
+            print("Exception file recognized: ", Path(fullpath).name)
             return excep_dist_end
     return dist_end
 
@@ -230,19 +214,19 @@ def _generate_outpath(
     return Path(root, out_name, feature_file, feature_file)
 
 
-def _get_feature_df(
-    features: pd.DataFrame, use_features: Iterable, use_times: int
+def get_feature_df(
+    data: pd.DataFrame, use_features: Sequence, use_times: int = 1
 ) -> pd.DataFrame:
-    """Extract features to use from given DataFrame"""
+    """Extract features to use from given DataFrame."""
     column_picks = [
         col
-        for col in features.columns
+        for col in data.columns
         if any(pick in col for pick in use_features)
     ]
-    used_features = features[column_picks]
+    used_features = data[column_picks]
 
     # Initialize list of features to use
-    feat_list = [
+    features = [
         used_features.rename(
             columns={col: col + "_100_ms" for col in used_features.columns}
         )
@@ -252,7 +236,7 @@ def _get_feature_df(
     # use_times = 1 means no features from previous time points are
     # being used
     for use_time in np.arange(1, use_times):
-        feat_list.append(
+        features.append(
             used_features.shift(use_time, axis=0).rename(
                 columns={
                     col: col + "_" + str((use_time + 1) * 100) + "_ms"
@@ -262,7 +246,7 @@ def _get_feature_df(
         )
 
     # Return final features dataframe
-    return pd.concat(feat_list, axis=1).fillna(0.0)
+    return pd.concat(features, axis=1).fillna(0.0)
 
 
 def _get_column_picks(

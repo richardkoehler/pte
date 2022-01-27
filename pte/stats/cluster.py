@@ -1,10 +1,122 @@
 """Module for cluster-based statistics."""
 from typing import Iterable, Optional
+from matplotlib import pyplot as plt
 
 import numpy as np
 from numba import njit
+from skimage import measure
 
 import pte
+
+
+def _null_distribution_2d(
+    _data: np.ndarray, _alpha: float, _n_perm: int
+) -> np.ndarray:
+    """Calculate null distribution of clusters.
+
+    Parameters
+    ----------
+    _data :  np.ndarray
+        Data of three dimensions (first dimension is the number of
+        measurements), e.g. shape: (n_subjects, n_freqs, n_times)
+    _alpha : float
+        Significance level (p-value)
+    _n_perm : int
+        No. of random permutations
+
+    Returns
+    -------
+    null_distribution : np.ndarray
+        Null distribution of shape (_n_perm, )
+    """
+    # loop through random permutation cycles
+    null_distribution = np.zeros(_n_perm)
+    for perm in range(_n_perm):
+        print(f"Permutation: {perm}/{_n_perm}.")
+        sign = np.random.choice(
+            a=np.array([-1.0, 1.0]), size=_data.shape[0], replace=True
+        ).reshape(_data.shape[0], 1, 1)
+        _p_values = pte.stats.permutation_2d(
+            x=_data.copy() * sign, y=0, n_perm=_n_perm, two_tailed=True
+        )
+        _labels, num_clusters = measure.label(
+            _p_values <= _alpha, return_num=True, connectivity=2
+        )
+
+        max_p_sum = 0
+        if num_clusters > 0:
+            for i in range(num_clusters):
+                _index_cluster = np.asarray(_labels == i + 1).nonzero()
+                p_sum = np.sum(np.asarray(1 - _p_values)[_index_cluster])
+                max_p_sum = max(p_sum, max_p_sum)
+        null_distribution[perm] = max_p_sum
+    return null_distribution
+
+
+def cluster_2d(
+    data: np.ndarray,
+    alpha: float = 0.05,
+    n_perm: int = 1000,
+    only_max_cluster: bool = False,
+) -> tuple[list, list]:
+    """Calculate significant clusters and their corresponding p-values.
+
+    Based on:
+    https://github.com/neuromodulation/wjn_toolbox/blob/4745557040ad26f3b8498ca5d0c5d5dece2d3ba1/mypcluster.m
+    https://garstats.wordpress.com/2018/09/06/cluster/
+
+    Arguments
+    ---------
+    p_values :  numpy array
+        Array of p-values. WARNING: MUST be one-dimensional
+    alpha : float
+        Significance level
+    n_perm : int
+        No. of random permutations for building cluster null-distribution
+    only_max_cluster : bool, default = False
+        Set to True to only return the most significant cluster.
+
+    Returns
+    -------
+    cluster_pvals : list of float(s)
+        List of p-values for each cluster
+    clusters : list of numpy array(s)
+        List of indices of each significant cluster
+    """
+    # Get 2D clusters
+    p_values = pte.stats.permutation_2d(
+        x=data, y=0, n_perm=n_perm, two_tailed=True
+    )
+    labels, num_clusters = measure.label(
+        p_values <= alpha, return_num=True, connectivity=2
+    )
+    null_distr = _null_distribution_2d(data, alpha, n_perm)
+    plt.hist(null_distr)
+    plt.show(block=False)
+    # Loop through clusters of p_val series or image
+    clusters = []
+    # Initialize empty list with specific data type for numba to work
+    cluster_pvals = [np.float64(x) for x in range(0)]
+    max_cluster_sum = 0  # Is only used if only_max_cluster
+    # Cluster labels start at 1
+    for cluster_i in range(num_clusters):
+        # index_cluster = np.where(labels == cluster_i + 1)[0]
+        index_cluster = np.asarray(labels == cluster_i + 1)
+        index_cluster = index_cluster.nonzero()
+        p_cluster_sum = np.sum(np.asarray(1 - p_values)[index_cluster])
+        print(f"Cluster value: {p_cluster_sum}")
+        p_val = (n_perm - np.sum(p_cluster_sum >= null_distr) + 1) / n_perm
+        if p_val <= alpha:
+            clusters.append(index_cluster)
+            cluster_pvals.append(p_val)
+        if only_max_cluster:
+            if p_cluster_sum > max_cluster_sum:
+                clusters.clear()
+                clusters.append(index_cluster)
+                cluster_pvals = [p_val]
+                max_cluster_sum = p_cluster_sum
+    return cluster_pvals, clusters
+
 
 def clusters_from_pvals(
     p_vals: np.ndarray,
@@ -73,7 +185,7 @@ def get_clusters(data: Iterable, min_cluster_size: int = 1):
 
 
 @njit
-def clusterwise_pval_numba(p_arr, p_sig, n_perm, mode="all"):
+def clusterwise_pval_numba(p_values, alpha, n_perm, only_max_cluster=False):
     """Calculate significant clusters and their corresponding p-values.
 
     Based on:
@@ -82,22 +194,24 @@ def clusterwise_pval_numba(p_arr, p_sig, n_perm, mode="all"):
 
     Arguments
     ---------
-    p_arr :  array-like
+    p_values :  numpy array
         Array of p-values. WARNING: MUST be one-dimensional
-    p_sig : float
+    alpha : float
         Significance level
     n_perm : int
         No. of random permutations for building cluster null-distribution
+    only_max_cluster : bool, default = False
+        Set to True to only return the most significant cluster.
 
     Returns
     -------
-    p : list of floats
+    cluster_pvals : list of float(s)
         List of p-values for each cluster
-    p_min_index : list of numpy array
+    clusters : list of numpy array(s)
         List of indices of each significant cluster
     """
 
-    def cluster(iterable):
+    def _cluster(iterable):
         """Cluster 1-D array of boolean values.
 
         Parameters
@@ -131,65 +245,66 @@ def clusterwise_pval_numba(p_arr, p_sig, n_perm, mode="all"):
             cluster_count += 1
         return cluster_labels, cluster_count
 
-    def calculate_null_distribution(p_arr_, p_sig_, n_perm_):
+    def _null_distribution(_p_values, _alpha, _n_perm):
         """Calculate null distribution of clusters.
 
         Parameters
         ----------
-        p_arr_ :  np.ndarray
+        _p_values :  np.ndarray
             Array of p-values
-        p_sig_ : float
+        _alpha : float
             Significance level (p-value)
-        n_perm_ : int
+        _n_perm : int
             No. of random permutations
 
         Returns
         -------
-        r_per_arr : np.ndarray
-            Null distribution of shape (n_perm_)
+        null_distribution : np.ndarray
+            Null distribution of shape (_n_perm, )
         """
         # loop through random permutation cycles
-        r_per_arr = np.zeros(n_perm_)
-        for i in range(n_perm_):
+        null_distribution = np.zeros(_n_perm)
+        for i in range(_n_perm):
             r_per = np.random.randint(
-                low=0, high=p_arr_.shape[0], size=p_arr_.shape[0]
+                low=0, high=_p_values.shape[0], size=_p_values.shape[0]
             )
-            labels_, n_clusters = cluster(p_arr_[r_per] <= p_sig_)
+            pvals_perm = _p_values[r_per]
+            labels_, n_clusters = _cluster(pvals_perm <= _alpha)
 
             cluster_ind = {}
             if n_clusters == 0:
-                r_per_arr[i] = 0
+                null_distribution[i] = 0
             else:
                 p_sum = np.zeros(n_clusters)
                 for ind in range(n_clusters):
                     cluster_ind[ind] = np.where(labels_ == ind + 1)[0]
                     p_sum[ind] = np.sum(
-                        np.asarray(1 - p_arr_[r_per])[cluster_ind[ind]]
+                        np.asarray(1 - pvals_perm)[cluster_ind[ind]]
                     )
-                r_per_arr[i] = np.max(p_sum)
-        return r_per_arr
+                null_distribution[i] = np.max(p_sum)
+        return null_distribution
 
-    labels, num_clusters = cluster(p_arr <= p_sig)
+    labels, num_clusters = _cluster(p_values <= alpha)
 
-    null_distr = calculate_null_distribution(p_arr, p_sig, n_perm)
+    null_distr = _null_distribution(p_values, alpha, n_perm)
     # Loop through clusters of p_val series or image
     clusters = []
     # Initialize empty list with specific data type for numba to work
-    p_vals = [np.float64(x) for x in range(0)]
-    if mode == "max":
+    cluster_pvals = [np.float64(x) for x in range(0)]
+    if only_max_cluster:
         max_cluster_sum = 0
     # Cluster labels start at 1
     for cluster_i in range(num_clusters):
         index_cluster = np.where(labels == cluster_i + 1)[0]
-        p_cluster_sum = np.sum(np.asarray(1 - p_arr)[index_cluster])
+        p_cluster_sum = np.sum(np.asarray(1 - p_values)[index_cluster])
         p_val = (n_perm - np.sum(p_cluster_sum >= null_distr) + 1) / n_perm
-        if p_val <= p_sig:
+        if p_val <= alpha:
             clusters.append(index_cluster)
-            p_vals.append(p_val)
-        if mode == "max":
+            cluster_pvals.append(p_val)
+        if only_max_cluster:
             if max_cluster_sum == 0 or p_cluster_sum > max_cluster_sum:
                 clusters.clear()
                 clusters.append(index_cluster)
-                p_vals = [p_val]
+                cluster_pvals = [p_val]
                 max_cluster_sum = p_cluster_sum
-    return p_vals, clusters
+    return cluster_pvals, clusters

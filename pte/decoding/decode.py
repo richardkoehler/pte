@@ -6,6 +6,7 @@ from typing import Any, Optional
 import numpy as np
 from bayes_opt import BayesianOptimization
 from catboost import CatBoostClassifier
+import pandas as pd
 from sklearn.discriminant_analysis import (
     LinearDiscriminantAnalysis,
     QuadraticDiscriminantAnalysis,
@@ -21,7 +22,7 @@ from .decode_abc import Decoder
 
 
 def get_decoder(
-    classifier: str,
+    classifier: str = "lda",
     scoring: str = "balanced_accuracy",
     balancing: Optional[str] = None,
     optimize: bool = False,
@@ -51,9 +52,9 @@ def get_decoder(
         "lda": LDA,
         "lr": LR,
         "qda": QDA,
-        "svm_lin": SVC_Lin,
-        "svm_poly": SVC_Poly,
-        "svm_rbf": SVC_RBF,
+        # "svm_lin": SVC_Lin,
+        # "svm_poly": SVC_Poly,
+        # "svm_rbf": SVC_RBF,
         "xgb": XGB,
     }
     SCORING_METHODS = {
@@ -146,7 +147,10 @@ class CATB(Decoder):
             eval_metric="MultiClass",
         )
 
-    def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
+    def fit(
+        self, data: np.ndarray, labels: np.ndarray, groups: np.ndarray
+    ) -> None:
+        """Fit model to given training data and training labels."""
         self.data_train = data
         self.labels_train = labels
         self.groups_train = groups
@@ -238,7 +242,10 @@ class CATB(Decoder):
             groups_tr = self.groups_train[train_index]
 
             (X_tr, y_tr, eval_set_inner,) = self._get_validation_split(
-                data=X_tr, labels=y_tr, groups=groups_tr, train_size=0.8,
+                data=X_tr,
+                labels=y_tr,
+                groups=groups_tr,
+                train_size=0.8,
             )
             X_tr, y_tr, sample_weight = self._balance_samples(
                 X_tr, y_tr, self.balancing
@@ -286,8 +293,10 @@ class LDA(Decoder):
                 "Linear Discriminant Analysis. Please set `optimize` to False."
             )
 
-    def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
-        """"""
+    def fit(
+        self, data: np.ndarray, labels: np.ndarray, groups: np.ndarray
+    ) -> None:
+        """Fit model to given training data and training labels."""
         self.data_train, self.labels_train, _ = self._balance_samples(
             data, labels, self.balancing
         )
@@ -302,7 +311,7 @@ class LR(Decoder):
     """Basic representation of class for finding and filtering files."""
 
     def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
-        """"""
+        """Fit model to given training data and training labels."""
         self.data_train = data
         self.labels_train = labels
         self.groups_train = groups
@@ -366,7 +375,7 @@ class Dummy(Decoder):
     """Dummy classifier implementation from scikit learn"""
 
     def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
-        """"""
+        """Fit model to given training data and training labels."""
         self.data_train, self.labels_train, _ = self._balance_samples(
             data, labels, self.balancing
         )
@@ -400,7 +409,7 @@ class QDA(Decoder):
             )
 
     def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
-        """"""
+        """Fit model to given training data and training labels."""
         self.data_train, self.labels_train, _ = self._balance_samples(
             data, labels, self.balancing
         )
@@ -442,7 +451,9 @@ class XGB(Decoder):
     def _bo_tune(
         self, learning_rate, gamma, max_depth, subsample, colsample_bytree
     ):
-        cv_inner = GroupKFold(n_splits=3,)
+        cv_inner = GroupKFold(
+            n_splits=3,
+        )
         scores = []
 
         for train_index, test_index in cv_inner.split(
@@ -459,7 +470,10 @@ class XGB(Decoder):
             groups_tr = self.groups_train[train_index]
 
             (X_tr, y_tr, eval_set_inner,) = self._get_validation_split(
-                data=X_tr, labels=y_tr, groups=groups_tr, train_size=0.8,
+                data=X_tr,
+                labels=y_tr,
+                groups=groups_tr,
+                train_size=0.8,
             )
             (X_tr, y_tr, sample_weight,) = self._balance_samples(
                 data=X_tr, labels=y_tr, method=self.balancing
@@ -491,9 +505,9 @@ class XGB(Decoder):
         return -1.0 * np.mean(scores)
 
     def fit(
-        self, data: np.ndarray, labels: np.ndarray, groups: np.ndarray
+        self, data: pd.DataFrame, labels: np.ndarray, groups: np.ndarray
     ) -> None:
-        """"""
+        """Fit model to given training data and training labels."""
         self.data_train = data
         self.labels_train = labels
         self.groups_train = groups
@@ -537,276 +551,268 @@ class XGB(Decoder):
             verbose=False,
         )
 
+    # @dataclass
+    # class SVC_Lin(Decoder):
+    #     """"""
 
-@dataclass
-class SVC_Lin(Decoder):
-    """"""
+    # @dataclass
+    # class SVC_Poly(Decoder):
+    #     """"""
 
+    # @dataclass
+    # class SVC_RBF(Decoder):
+    #     """"""
 
-@dataclass
-class SVC_Poly(Decoder):
-    """"""
+    # @dataclass
+    # class SVC_Sig(Decoder):
+    #     """"""
 
+    # def classify_svm_lin(X_train, y_train, group_train, optimize, balance):
+    #     """"""
 
-@dataclass
-class SVC_RBF(Decoder):
-    """"""
+    #     def bo_tune(C, tol):
+    #         # Cross validating with the specified parameters in 5 folds
+    #         cv_inner = GroupShuffleSplit(
+    #             n_splits=3, train_size=0.66, random_state=42
+    #         )
+    #         scores = []
+    #         for train_index, test_index in cv_inner.split(
+    #             X_train, y_train, group_train
+    #         ):
+    #             X_tr, X_te = X_train[train_index], X_train[test_index]
+    #             y_tr, y_te = y_train[train_index], y_train[test_index]
+    #             inner_model = SVC(
+    #                 kernel="linear",
+    #                 C=C,
+    #                 max_iter=500,
+    #                 tol=tol,
+    #                 gamma="scale",
+    #                 shrinking=True,
+    #                 class_weight=None,
+    #                 probability=True,
+    #                 verbose=False,
+    #             )
+    #             inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
+    #             y_probs = inner_model.predict_proba(X_te)
+    #             score = log_loss(y_te, y_probs, labels=[0, 1])
+    #             scores.append(score)
+    #         # Return the negative MLOGLOSS
+    #         return -1.0 * np.mean(scores)
 
+    #     if optimize:
+    #         # Perform Bayesian Optimization
+    #         bo = BayesianOptimization(
+    #             bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
+    #         )
+    #         bo.maximize(init_points=10, n_iter=20, acq="ei")
+    #         # Train outer model with optimized parameters
+    #         params = bo.max["params"]
+    #         # params['max_iter'] = 500
+    #         model = SVC(
+    #             kernel="linear",
+    #             C=params["C"],
+    #             max_iter=500,
+    #             tol=params["tol"],
+    #             gamma="scale",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             verbose=False,
+    #         )
+    #     else:
+    #         # Use default values
+    #         model = SVC(
+    #             kernel="linear",
+    #             gamma="scale",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             verbose=False,
+    #         )
+    #     model.fit(X_train, y_train, sample_weight=sample_weight)
+    #     return model
 
-@dataclass
-class SVC_Sig(Decoder):
-    """"""
+    # def classify_svm_rbf(X_train, y_train, group_train, optimize, balance):
+    #     """"""
 
+    #     def bo_tune(C, tol):
+    #         # Cross validating with the specified parameters in 5 folds
+    #         cv_inner = GroupShuffleSplit(
+    #             n_splits=3, train_size=0.66, random_state=42
+    #         )
+    #         scores = []
+    #         for train_index, test_index in cv_inner.split(
+    #             X_train, y_train, group_train
+    #         ):
+    #             X_tr, X_te = X_train[train_index], X_train[test_index]
+    #             y_tr, y_te = y_train[train_index], y_train[test_index]
+    #             inner_model = SVC(
+    #                 kernel="rbf",
+    #                 C=C,
+    #                 max_iter=500,
+    #                 tol=tol,
+    #                 gamma="scale",
+    #                 shrinking=True,
+    #                 class_weight=None,
+    #                 probability=True,
+    #                 verbose=False,
+    #             )
+    #             inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
+    #             y_probs = inner_model.predict_proba(X_te)
+    #             score = log_loss(y_te, y_probs, labels=[0, 1])
+    #             scores.append(score)
+    #         # Return the negative MLOGLOSS
+    #         return -1.0 * np.mean(scores)
 
-def classify_svm_lin(X_train, y_train, group_train, optimize, balance):
-    """"""
+    #     if optimize:
+    #         # Perform Bayesian Optimization
+    #         bo = BayesianOptimization(
+    #             bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
+    #         )
+    #         bo.maximize(init_points=10, n_iter=20, acq="ei")
+    #         # Train outer model with optimized parameters
+    #         params = bo.max["params"]
+    #         model = SVC(
+    #             kernel="rbf",
+    #             C=params["C"],
+    #             max_iter=500,
+    #             tol=params["tol"],
+    #             gamma="scale",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             verbose=False,
+    #         )
+    #     else:
+    #         # Use default values
+    #         model = SVC(
+    #             kernel="rbf",
+    #             gamma="scale",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             verbose=False,
+    #         )
+    #     model.fit(X_train, y_train, sample_weight=sample_weight)
+    #     return model
 
-    def bo_tune(C, tol):
-        # Cross validating with the specified parameters in 5 folds
-        cv_inner = GroupShuffleSplit(
-            n_splits=3, train_size=0.66, random_state=42
-        )
-        scores = []
-        for train_index, test_index in cv_inner.split(
-            X_train, y_train, group_train
-        ):
-            X_tr, X_te = X_train[train_index], X_train[test_index]
-            y_tr, y_te = y_train[train_index], y_train[test_index]
-            inner_model = SVC(
-                kernel="linear",
-                C=C,
-                max_iter=500,
-                tol=tol,
-                gamma="scale",
-                shrinking=True,
-                class_weight=None,
-                probability=True,
-                verbose=False,
-            )
-            inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
-            y_probs = inner_model.predict_proba(X_te)
-            score = log_loss(y_te, y_probs, labels=[0, 1])
-            scores.append(score)
-        # Return the negative MLOGLOSS
-        return -1.0 * np.mean(scores)
+    # def classify_svm_poly(X_train, y_train, group_train):
+    #     """"""
 
-    if optimize:
-        # Perform Bayesian Optimization
-        bo = BayesianOptimization(
-            bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
-        )
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
-        # Train outer model with optimized parameters
-        params = bo.max["params"]
-        # params['max_iter'] = 500
-        model = SVC(
-            kernel="linear",
-            C=params["C"],
-            max_iter=500,
-            tol=params["tol"],
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    else:
-        # Use default values
-        model = SVC(
-            kernel="linear",
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    model.fit(X_train, y_train, sample_weight=sample_weight)
-    return model
+    #     def bo_tune(C, tol):
+    #         # Cross validating with the specified parameters in 5 folds
+    #         cv_inner = GroupShuffleSplit(
+    #             n_splits=3, train_size=0.66, random_state=42
+    #         )
+    #         scores = []
+    #         for train_index, test_index in cv_inner.split(
+    #             X_train, y_train, group_train
+    #         ):
+    #             X_tr, X_te = X_train[train_index], X_train[test_index]
+    #             y_tr, y_te = y_train[train_index], y_train[test_index]
+    #             inner_model = SVC(
+    #                 kernel="poly",
+    #                 C=C,
+    #                 max_iter=500,
+    #                 tol=tol,
+    #                 gamma="scale",
+    #                 shrinking=True,
+    #                 class_weight=None,
+    #                 probability=True,
+    #                 verbose=False,
+    #             )
+    #             inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
+    #             y_probs = inner_model.predict_proba(X_te)
+    #             score = log_loss(y_te, y_probs, labels=[0, 1])
+    #             scores.append(score)
+    #         # Return the negative MLOGLOSS
+    #         return -1.0 * np.mean(scores)
 
+    #     if optimize:
+    #         # Perform Bayesian Optimization
+    #         bo = BayesianOptimization(
+    #             bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
+    #         )
+    #         bo.maximize(init_points=10, n_iter=20, acq="ei")
+    #         # Train outer model with optimized parameters
+    #         params = bo.max["params"]
+    #         model = SVC(
+    #             kernel="poly",
+    #             C=params["C"],
+    #             max_iter=500,
+    #             tol=params["tol"],
+    #             gamma="scale",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             verbose=False,
+    #         )
+    #     else:
+    #         # Use default values
+    #         model = SVC(
+    #             kernel="poly",
+    #             gamma="scale",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             verbose=False,
+    #         )
+    #     model.fit(X_train, y_train, sample_weight=sample_weight)
+    #     return model
 
-def classify_svm_rbf(X_train, y_train, group_train, optimize, balance):
-    """"""
+    # def classify_svm_sig(X_train, y_train, group_train, optimize, balance):
+    # """"""
 
-    def bo_tune(C, tol):
-        # Cross validating with the specified parameters in 5 folds
-        cv_inner = GroupShuffleSplit(
-            n_splits=3, train_size=0.66, random_state=42
-        )
-        scores = []
-        for train_index, test_index in cv_inner.split(
-            X_train, y_train, group_train
-        ):
-            X_tr, X_te = X_train[train_index], X_train[test_index]
-            y_tr, y_te = y_train[train_index], y_train[test_index]
-            inner_model = SVC(
-                kernel="rbf",
-                C=C,
-                max_iter=500,
-                tol=tol,
-                gamma="scale",
-                shrinking=True,
-                class_weight=None,
-                probability=True,
-                verbose=False,
-            )
-            inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
-            y_probs = inner_model.predict_proba(X_te)
-            score = log_loss(y_te, y_probs, labels=[0, 1])
-            scores.append(score)
-        # Return the negative MLOGLOSS
-        return -1.0 * np.mean(scores)
+    # def bo_tune(C, tol):
+    #     # Cross validating with the specified parameters in 5 folds
+    #     cv_inner = GroupShuffleSplit(
+    #         n_splits=3, train_size=0.66, random_state=42
+    #     )
+    #     scores = []
+    #     for train_index, test_index in cv_inner.split(
+    #         X_train, y_train, group_train
+    #     ):
+    #         X_tr, X_te = X_train[train_index], X_train[test_index]
+    #         y_tr, y_te = y_train[train_index], y_train[test_index]
+    #         inner_model = SVC(
+    #             kernel="sigmoid",
+    #             C=C,
+    #             max_iter=500,
+    #             tol=tol,
+    #             gamma="auto",
+    #             shrinking=True,
+    #             class_weight=None,
+    #             probability=True,
+    #             verbose=False,
+    #         )
+    #         inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
+    #         y_probs = inner_model.predict_proba(X_te)
+    #         score = log_loss(y_te, y_probs, labels=[0, 1])
+    #         scores.append(score)
+    #     # Return the negative MLOGLOSS
+    #     return -1.0 * np.mean(scores)
 
-    if optimize:
-        # Perform Bayesian Optimization
-        bo = BayesianOptimization(
-            bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
-        )
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
-        # Train outer model with optimized parameters
-        params = bo.max["params"]
-        model = SVC(
-            kernel="rbf",
-            C=params["C"],
-            max_iter=500,
-            tol=params["tol"],
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    else:
-        # Use default values
-        model = SVC(
-            kernel="rbf",
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    model.fit(X_train, y_train, sample_weight=sample_weight)
-    return model
+    # if optimize:
+    #     # Perform Bayesian Optimization
+    #     bo = BayesianOptimization(
+    #         bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
+    #     )
+    #     bo.maximize(init_points=10, n_iter=20, acq="ei")
+    #     # Train outer model with optimized parameters
+    #     params = bo.max["params"]
+    #     model = SVC(
+    #         kernel="sigmoid",
+    #         C=params["C"],
+    #         max_iter=500,
+    #         tol=params["tol"],
+    #         gamma="auto",
+    #         shrinking=True,
+    #         class_weight=None,
+    #         verbose=False,
+    #     )
+    # else:
+    #     # Use default values
+    #     model = SVC(
+    #         kernel="sigmoid",
+    #         gamma="scale",
+    #         shrinking=True,
+    #         class_weight=None,
+    #         verbose=False,
+    #     )
 
-
-def classify_svm_poly(X_train, y_train, group_train):
-    """"""
-
-    def bo_tune(C, tol):
-        # Cross validating with the specified parameters in 5 folds
-        cv_inner = GroupShuffleSplit(
-            n_splits=3, train_size=0.66, random_state=42
-        )
-        scores = []
-        for train_index, test_index in cv_inner.split(
-            X_train, y_train, group_train
-        ):
-            X_tr, X_te = X_train[train_index], X_train[test_index]
-            y_tr, y_te = y_train[train_index], y_train[test_index]
-            inner_model = SVC(
-                kernel="poly",
-                C=C,
-                max_iter=500,
-                tol=tol,
-                gamma="scale",
-                shrinking=True,
-                class_weight=None,
-                probability=True,
-                verbose=False,
-            )
-            inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
-            y_probs = inner_model.predict_proba(X_te)
-            score = log_loss(y_te, y_probs, labels=[0, 1])
-            scores.append(score)
-        # Return the negative MLOGLOSS
-        return -1.0 * np.mean(scores)
-
-    if optimize:
-        # Perform Bayesian Optimization
-        bo = BayesianOptimization(
-            bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
-        )
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
-        # Train outer model with optimized parameters
-        params = bo.max["params"]
-        model = SVC(
-            kernel="poly",
-            C=params["C"],
-            max_iter=500,
-            tol=params["tol"],
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    else:
-        # Use default values
-        model = SVC(
-            kernel="poly",
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    model.fit(X_train, y_train, sample_weight=sample_weight)
-    return model
-
-
-def classify_svm_sig(X_train, y_train, group_train, optimize, balance):
-    """"""
-
-    def bo_tune(C, tol):
-        # Cross validating with the specified parameters in 5 folds
-        cv_inner = GroupShuffleSplit(
-            n_splits=3, train_size=0.66, random_state=42
-        )
-        scores = []
-        for train_index, test_index in cv_inner.split(
-            X_train, y_train, group_train
-        ):
-            X_tr, X_te = X_train[train_index], X_train[test_index]
-            y_tr, y_te = y_train[train_index], y_train[test_index]
-            inner_model = SVC(
-                kernel="sigmoid",
-                C=C,
-                max_iter=500,
-                tol=tol,
-                gamma="auto",
-                shrinking=True,
-                class_weight=None,
-                probability=True,
-                verbose=False,
-            )
-            inner_model.fit(X_tr, y_tr, sample_weight=sample_weight)
-            y_probs = inner_model.predict_proba(X_te)
-            score = log_loss(y_te, y_probs, labels=[0, 1])
-            scores.append(score)
-        # Return the negative MLOGLOSS
-        return -1.0 * np.mean(scores)
-
-    if optimize:
-        # Perform Bayesian Optimization
-        bo = BayesianOptimization(
-            bo_tune, {"C": (pow(10, -1), pow(10, 1)), "tol": (1e-4, 1e-2)}
-        )
-        bo.maximize(init_points=10, n_iter=20, acq="ei")
-        # Train outer model with optimized parameters
-        params = bo.max["params"]
-        model = SVC(
-            kernel="sigmoid",
-            C=params["C"],
-            max_iter=500,
-            tol=params["tol"],
-            gamma="auto",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-    else:
-        # Use default values
-        model = SVC(
-            kernel="sigmoid",
-            gamma="scale",
-            shrinking=True,
-            class_weight=None,
-            verbose=False,
-        )
-
-    model.fit(X_train, y_train, sample_weight=sample_weight)
-    return model
+    # model.fit(X_train, y_train, sample_weight=sample_weight)
+    # return model
