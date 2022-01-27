@@ -69,6 +69,6 @@ PTE is licensed under the [MIT license](license-url).
 [contributors-shield]: https://img.shields.io/github/contributors/richardkoehler/pte.svg?style=for-the-badge
 [contributors-url]: https://github.com/richardkoehler/pte/graphs/contributors
 [license-shield]: https://img.shields.io/static/v1?label=License&message=MIT&logoColor=black&labelColor=grey&logoWidth=20&color=yellow&style=for-the-badge
-[license-url]: https://github.com/richardkoehler/pte/blob/main/LICENSE
+[license-url]: https://github.com/richardkoehler/pte/blob/main/LICENSE/
 [codestyle-shield]: https://img.shields.io/static/v1?label=CodeStyle&message=black&logoColor=black&labelColor=grey&logoWidth=20&color=black&style=for-the-badge
 [codestyle-url]: https://github.com/psf/black
