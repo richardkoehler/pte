@@ -1,5 +1,7 @@
 [![Homepage][homepage-shield]][homepage-url]
+[![License][license-shield]][license-url]
 [![Contributors][contributors-shield]][contributors-url]
+[![Code Style][codestyle-shield]][codestyle-url]
 
 
 # PTE - Python tools for electrophysiology
@@ -49,10 +51,16 @@ For any minor additions or bugfixes, you may simply create a **pull request**.
 
 For any major changes, make sure to open an **issue** first. When you then create a pull request, be sure to **link the pull request** to the open issue in order to close the issue automatically after merging.
 
+To contribute, consider installing the full conda development environment to include such tools as black, pylint and isort:
+
+```bash
+conda env create -f environment_dev.yml
+```
+
 Continuous Integration (CI) including automated testing are set up.
 
 ## License
-To be added
+PTE is licensed under the [MIT license](license-url).
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
@@ -60,3 +68,7 @@ To be added
 [homepage-url]: https://www.icneuromodulation.org/
 [contributors-shield]: https://img.shields.io/github/contributors/richardkoehler/pte.svg?style=for-the-badge
 [contributors-url]: https://github.com/richardkoehler/pte/graphs/contributors
+[license-shield]: https://img.shields.io/static/v1?label=License&message=MIT&logoColor=black&labelColor=grey&logoWidth=20&color=yellow&style=for-the-badge
+[license-url]: https://github.com/richardkoehler/pte/blob/main/LICENSE
+[codestyle-shield]: https://img.shields.io/static/v1?label=CodeStyle&message=black&logoColor=black&labelColor=grey&logoWidth=20&color=black&style=for-the-badge
+[codestyle-url]: https://github.com/psf/black
