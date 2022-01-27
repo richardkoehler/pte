@@ -114,7 +114,7 @@ class FileFinder(ABC):
         medication: Optional[str] = None,
         exclude: Optional[Union[str, list[str]]] = None,
     ) -> List[str]:
-        """Filter list of filepaths for given parameters and return filtered list."""
+        """Filter filepaths for given parameters and return filtered list."""
         filtered_files = self.files
         if exclude:
             if not isinstance(exclude, list):
@@ -198,7 +198,10 @@ class HemisphereNotSpecifiedError(Exception):
         self,
         subject,
         hemispheres,
-        message="Input ECOG hemisphere is not specified in `settings.py` for given subject.",
+        message=(
+            "Input ECOG hemisphere is not specified in `settings.py` for"
+            " given subject."
+        ),
     ) -> None:
         self.subject = subject
         self.hemispheres = hemispheres

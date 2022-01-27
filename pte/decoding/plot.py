@@ -31,11 +31,6 @@ def violinplot_results(
     figsize: Union[tuple, str] = "auto",
 ) -> None:
     """Plot performance as combined boxplot and stripplot."""
-    # data = data[["Channels", "Balanced Accuracy", "Subject"]]
-
-    color = "black"
-    alpha_box = 0.5
-
     if not order:
         order = data[x].unique()
 
@@ -45,8 +40,6 @@ def violinplot_results(
     if figsize == "auto":
         hue_factor = 1 if not hue else len(hue_order)
         figsize = (1.1 * len(order) * hue_factor, 4)
-
-    # plt.figure(figsize=figsize)
 
     fig, ax = plt.subplots(nrows=1, ncols=1, figsize=figsize)
 
@@ -436,42 +429,6 @@ def _permutation_wrapper(x, y, n_perm) -> tuple:
     return pte.stats.permutation_twosample(x=x, y=y, n_perm=n_perm)
 
 
-def _add_median_labels(ax: axes.Axes, add_borders: bool = False) -> None:
-    """"""
-    lines = ax.get_lines()
-    # determine number of lines per box (this varies with/without fliers)
-    boxes = [c for c in ax.get_children() if type(c).__name__ == "PathPatch"]
-    lines_per_box = int(len(lines) / len(boxes))
-    # iterate over median lines
-    for median in lines[4 : len(lines) : lines_per_box]:
-        # display median value at center of median line
-        x, y = (data.mean() for data in median.get_data())
-        # choose value depending on horizontal or vertical plot orientation
-        value = (
-            x if (median.get_xdata()[1] - median.get_xdata()[0]) == 0 else y
-        )
-        if add_borders:
-            # create median-colored border around white text for contrast
-            text = ax.text(
-                x,
-                y,
-                f"{value:.3f}",
-                ha="center",
-                va="center",
-                fontweight="ultralight",
-                color="white",
-                fontsize="medium",
-            )
-            text.set_path_effects(
-                [
-                    patheffects.Stroke(
-                        linewidth=0.0, foreground=median.get_color()
-                    ),
-                    patheffects.Normal(),
-                ]
-            )
-
-
 def _pval_correction_lineplot(
     ax: axes.Axes,
     x: np.ndarray,
@@ -590,7 +547,7 @@ def _single_lineplot(
     ax.set_title(subpl_title, fontsize="medium")
 
 
-def _add_median_labels(ax: axes.Axes) -> None:
+def _add_median_labels(ax: axes.Axes, add_borders: bool = False) -> None:
     """Add median labels to boxplot."""
     lines = ax.get_lines()
     # determine number of lines per box (this varies with/without fliers)
@@ -604,7 +561,7 @@ def _add_median_labels(ax: axes.Axes) -> None:
         value = (
             x if (median.get_xdata()[1] - median.get_xdata()[0]) == 0 else y
         )
-        _ = ax.text(
+        text = ax.text(
             x=x,
             y=y,
             s=f"{value:.3f}",
@@ -614,3 +571,13 @@ def _add_median_labels(ax: axes.Axes) -> None:
             color="white",
             fontsize="medium",
         )
+        if add_borders:
+            # create median-colored border around white text for contrast
+            text.set_path_effects(
+                [
+                    patheffects.Stroke(
+                        linewidth=0.0, foreground=median.get_color()
+                    ),
+                    patheffects.Normal(),
+                ]
+            )

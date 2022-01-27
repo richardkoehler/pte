@@ -1,7 +1,6 @@
-"""Find and filter files in given directory. Supports BIDSPath objects from `mne-bids`."""
+"""Find and filter files. Supports BIDSPath objects from `mne-bids`."""
 
 from dataclasses import dataclass, field
-import os
 from pathlib import Path
 from typing import Optional, Union
 
@@ -46,7 +45,7 @@ class DefaultFinder(FileFinder):
         exclude: str = None,
         verbose: bool = False,
     ) -> None:
-        """Filter list of filepaths for given parameters and return filtered list."""
+        """Filter filepaths for given parameters and return filtered list."""
         self._filter_files(
             keywords=keywords,
             hemisphere=hemisphere,
@@ -166,7 +165,7 @@ class FinderNotFoundError(Exception):
         self,
         datatype,
         finders,
-        message="Input datatype is not an allowed value.",
+        message="Input ``datatype`` is not an allowed value.",
     ) -> None:
         self.datatype = datatype
         self.finders = finders.values
@@ -174,4 +173,7 @@ class FinderNotFoundError(Exception):
         super().__init__(self.message)
 
     def __str__(self):
-        return f"{{self.message}} Allowed values: {self.finders}. Got: {self.datatype}."
+        return (
+            f"{{self.message}} Allowed values: {self.finders}."
+            f" Got: {self.datatype}."
+        )

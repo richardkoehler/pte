@@ -1,6 +1,6 @@
 """Module for permutation testing."""
 
-from numba import njit, jit
+from numba import njit
 import numpy as np
 
 
@@ -128,27 +128,23 @@ def permutation_twosample(x, y, n_perm=10000, two_tailed=True):
         P-value of permutation test
     """
     if two_tailed is True:
-        z = np.abs(np.mean(x) - np.mean(y))
-        pS = np.concatenate((x, y), axis=0)
-        half = int(len(pS) / 2)
+        zeroed = np.abs(np.mean(x) - np.mean(y))
+        data = np.concatenate((x, y), axis=0)
+        half = int(len(data) / 2)
         p = np.empty(n_perm)
-        # Run the simulation n_perm times
         for i in np.arange(0, n_perm):
-            # Shuffle the data
-            np.random.shuffle(pS)
+            np.random.shuffle(data)
             # Compute permuted absolute difference of the two sampled
             # distributions
-            p[i] = np.abs(np.mean(pS[:half]) - np.mean(pS[half:]))
+            p[i] = np.abs(np.mean(data[:half]) - np.mean(data[half:]))
     else:
-        z = np.mean(x) - np.mean(y)
-        pS = np.concatenate((x, y), axis=0)
-        half = int(len(pS) / 2)
+        zeroed = np.mean(x) - np.mean(y)
+        data = np.concatenate((x, y), axis=0)
+        half = int(len(data) / 2)
         p = np.empty(n_perm)
-        # Run the simulation n_perm times
         for i in np.arange(0, n_perm):
-            # Shuffle the data
-            np.random.shuffle(pS)
+            np.random.shuffle(data)
             # Compute permuted absolute difference of the two sampled
             # distributions
-            p[i] = np.mean(pS[:half]) - np.mean(pS[half:])
-    return z, (np.sum(p >= z) + 1) / (n_perm + 1)
+            p[i] = np.mean(data[:half]) - np.mean(data[half:])
+    return zeroed, (np.sum(p >= zeroed) + 1) / (n_perm + 1)

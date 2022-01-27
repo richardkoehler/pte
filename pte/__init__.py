@@ -1,3 +1,10 @@
 """Package for electrophysiological analyses."""
 
-from . import decoding, filetools, plotting, processing, stats, time_frequency
+from . import (
+    decoding,
+    filetools,
+    plotting,
+    preprocessing,
+    stats,
+    time_frequency,
+)

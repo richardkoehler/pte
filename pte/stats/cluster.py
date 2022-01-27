@@ -10,18 +10,18 @@ import pte
 
 
 def _null_distribution_2d(
-    _data: np.ndarray, _alpha: float, _n_perm: int
+    data_: np.ndarray, alpha_: float, n_perm_: int
 ) -> np.ndarray:
     """Calculate null distribution of clusters.
 
     Parameters
     ----------
-    _data :  np.ndarray
+    data_ :  np.ndarray
         Data of three dimensions (first dimension is the number of
         measurements), e.g. shape: (n_subjects, n_freqs, n_times)
-    _alpha : float
+    alpha_ : float
         Significance level (p-value)
-    _n_perm : int
+    n_perm_ : int
         No. of random permutations
 
     Returns
@@ -30,24 +30,24 @@ def _null_distribution_2d(
         Null distribution of shape (_n_perm, )
     """
     # loop through random permutation cycles
-    null_distribution = np.zeros(_n_perm)
-    for perm in range(_n_perm):
-        print(f"Permutation: {perm}/{_n_perm}.")
+    null_distribution = np.zeros(n_perm_)
+    for perm in range(n_perm_):
+        print(f"Permutation: {perm}/{n_perm_}.")
         sign = np.random.choice(
-            a=np.array([-1.0, 1.0]), size=_data.shape[0], replace=True
-        ).reshape(_data.shape[0], 1, 1)
-        _p_values = pte.stats.permutation_2d(
-            x=_data.copy() * sign, y=0, n_perm=_n_perm, two_tailed=True
+            a=np.array([-1.0, 1.0]), size=data_.shape[0], replace=True
+        ).reshape(data_.shape[0], 1, 1)
+        p_values_ = pte.stats.permutation_2d(
+            x=data_.copy() * sign, y=0, n_perm=n_perm_, two_tailed=True
         )
-        _labels, num_clusters = measure.label(
-            _p_values <= _alpha, return_num=True, connectivity=2
+        labels_, num_clusters = measure.label(
+            p_values_ <= alpha_, return_num=True, connectivity=2
         )
 
         max_p_sum = 0
         if num_clusters > 0:
             for i in range(num_clusters):
-                _index_cluster = np.asarray(_labels == i + 1).nonzero()
-                p_sum = np.sum(np.asarray(1 - _p_values)[_index_cluster])
+                index_cluster_ = np.asarray(labels_ == i + 1).nonzero()
+                p_sum = np.sum(np.asarray(1 - p_values_)[index_cluster_])
                 max_p_sum = max(p_sum, max_p_sum)
         null_distribution[perm] = max_p_sum
     return null_distribution
@@ -245,16 +245,16 @@ def clusterwise_pval_numba(p_values, alpha, n_perm, only_max_cluster=False):
             cluster_count += 1
         return cluster_labels, cluster_count
 
-    def _null_distribution(_p_values, _alpha, _n_perm):
+    def _null_distribution(p_values_, alpha_, n_perm_):
         """Calculate null distribution of clusters.
 
         Parameters
         ----------
-        _p_values :  np.ndarray
+        p_values :  np.ndarray
             Array of p-values
-        _alpha : float
+        alpha_ : float
             Significance level (p-value)
-        _n_perm : int
+        n_perm_ : int
             No. of random permutations
 
         Returns
@@ -263,13 +263,13 @@ def clusterwise_pval_numba(p_values, alpha, n_perm, only_max_cluster=False):
             Null distribution of shape (_n_perm, )
         """
         # loop through random permutation cycles
-        null_distribution = np.zeros(_n_perm)
-        for i in range(_n_perm):
+        null_distribution = np.zeros(n_perm_)
+        for i in range(n_perm_):
             r_per = np.random.randint(
-                low=0, high=_p_values.shape[0], size=_p_values.shape[0]
+                low=0, high=p_values_.shape[0], size=p_values_.shape[0]
             )
-            pvals_perm = _p_values[r_per]
-            labels_, n_clusters = _cluster(pvals_perm <= _alpha)
+            pvals_perm = p_values_[r_per]
+            labels_, n_clusters = _cluster(pvals_perm <= alpha_)
 
             cluster_ind = {}
             if n_clusters == 0:
@@ -291,8 +291,7 @@ def clusterwise_pval_numba(p_values, alpha, n_perm, only_max_cluster=False):
     clusters = []
     # Initialize empty list with specific data type for numba to work
     cluster_pvals = [np.float64(x) for x in range(0)]
-    if only_max_cluster:
-        max_cluster_sum = 0
+    max_cluster_sum = 0
     # Cluster labels start at 1
     for cluster_i in range(num_clusters):
         index_cluster = np.where(labels == cluster_i + 1)[0]

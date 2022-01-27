@@ -116,7 +116,6 @@ def _apply_baseline_array(
 ) -> mne.time_frequency.AverageTFR:
     """Apply baseline correction given array."""
     data = power.data.copy()
-    test_2 = data.copy()
     if not baseline.ndim == data.ndim:
         raise ValueError(
             "If `baseline` is an array of values, it must have"
@@ -263,11 +262,11 @@ def average_power(
         power = power.copy().pick(picks=picks)
         if baseline:
             if not isinstance(baseline, list):
-                _baseline = baseline
+                baseline_ = baseline
             else:
-                _baseline = baseline
+                baseline_ = baseline
             power = apply_baseline(
-                power=power, baseline=_baseline, baseline_mode=baseline_mode
+                power=power, baseline=baseline_, baseline_mode=baseline_mode
             )  # type: ignore
         df_power = power.to_data_frame(picks=picks)
         freqs = power.freqs  # type: ignore
@@ -281,15 +280,17 @@ def average_power(
             )
             # reject artifacts by clipping
             if clip is not None:
-                power_single_freq = power_single_freq.clip(min=-clip, max=clip)
+                power_single_freq = power_single_freq.clip(
+                    min=clip * -1, max=clip
+                )
             power_all_freqs.append(power_single_freq)
         # Average across all channels
         power_all_files.append(np.stack(power_all_freqs, axis=0).mean(axis=-1))
     power_array_all = np.expand_dims(
         np.stack(power_all_files, axis=0).mean(axis=0), axis=0
     )
-    if clip:
-        power_array_all = power_array_all.clip(min=-clip, max=clip)
+    if clip is not None:
+        power_array_all = power_array_all.clip(min=clip * -1, max=clip)
     power = powers[0]
     info = mne.create_info(
         ch_names=1, sfreq=power.info["sfreq"], ch_types="misc", verbose=False
@@ -463,14 +464,14 @@ def power_from_bids(
 
     try:
         if kwargs_preprocess:
-            raw = pte.processing.preprocess(
+            raw = pte.preprocessing.preprocess(
                 raw=raw,
                 nm_channels_dir=nm_channels_dir,
                 pick_used_channels=True,
                 **kwargs_preprocess,
             )
         else:
-            raw = pte.processing.preprocess(
+            raw = pte.preprocessing.preprocess(
                 raw=raw,
                 pick_used_channels=True,
                 nm_channels_dir=nm_channels_dir,
