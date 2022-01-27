@@ -1,6 +1,6 @@
 [![Homepage][homepage-shield]][homepage-url]
 [![Contributors][contributors-shield]][contributors-url]
-[![License](license-shield)][license-url]
+[![License](license-shield)]][license-url]
 
 
 # PTE - Python tools for electrophysiology
