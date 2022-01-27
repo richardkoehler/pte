@@ -1,7 +1,7 @@
 """Module for processing of EMG channels."""
 
 from typing import Iterable, Union
-from numba import jit
+from numba import njit
 import numpy as np
 
 import mne
@@ -16,7 +16,7 @@ def get_emg_rms(
     notch_filter: Union[float, int] = 50,
 ) -> mne.io.Raw:
     """Return root mean square with given window length of raw object.
-    
+
     Parameters
     ----------
     raw : MNE raw object
@@ -89,12 +89,12 @@ def get_emg_rms(
     return raw_rms
 
 
-@jit(nopython=True)
+@njit
 def _rms_window_nb(
     data: np.ndarray, window_len: Union[float, int], sfreq: Union[float, int]
 ) -> np.ndarray:
     """Return root mean square of input signal with given window length.
-    
+
     Parameters
     ----------
     data : numpy.ndarray
@@ -113,7 +113,7 @@ def _rms_window_nb(
     half_window_size = int(sfreq * window_len / 1000 / 2)
     data_rms = np.empty_like(data)
     for i, dat_ in enumerate(data):
-        if i == 0 or i == len(data) - 1:
+        if i in (0, len(data) - 1):
             data_rms[i] = np.absolute(dat_)
         elif i < half_window_size:
             new_window_size = i

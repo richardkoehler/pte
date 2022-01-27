@@ -1,5 +1,5 @@
 """Module for functions regarding multiple comparison."""
-from typing import Iterable, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from statsmodels.stats.multitest import fdrcorrection
@@ -37,7 +37,7 @@ def correct_pvals(
     """Correct p-values for multiple comparisons."""
     if correction_method == "cluster":
         _, signif = pte.stats.clusterwise_pval_numba(
-            p_values=p_vals, alpha=alpha, n_perm=n_perm, mode="all"
+            p_values=p_vals, alpha=alpha, n_perm=n_perm, only_max_cluster=False
         )
         if len(signif) > 0:
             signif = np.hstack(signif)

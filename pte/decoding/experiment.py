@@ -4,7 +4,7 @@ import json
 import pickle
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Optional, Sequence, Union
+from typing import Any, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -115,7 +115,6 @@ class _Results:
         scoring: str,
         events: Union[np.ndarray, list],
         events_used: Union[np.ndarray, list],
-        events_discarded: Iterable,
     ) -> None:
         """Save results to given path."""
         # Save scores
@@ -294,7 +293,6 @@ class Experiment:
             scoring=self.scoring,
             events_used=self.events_used,
             events=self.events,
-            events_discarded=self.events_discard,
         )
         # Save all features used for classificaiton
         self.feature_epochs["Label"] = self.labels
@@ -319,9 +317,9 @@ class Experiment:
         # Perform classification for each selected model
         for ch_pick, _ in zip(ch_picks, ch_types):
             cols = self._get_column_picks(self.feature_epochs, ch_pick)
-            X_train = self.feature_epochs[cols]
+            data_train = self.feature_epochs[cols]
             self.decoder.fit(
-                data=X_train, labels=self.labels, groups=self.groups
+                data=data_train, labels=self.labels, groups=self.groups
             )
             basename = f"{path.name}_{ch_pick}.pickle"
             filename = str(path.with_name(basename))
@@ -336,13 +334,13 @@ class Experiment:
             (self.label.to_numpy(), "Label"),
             (self.target_df.to_numpy(), "Target"),
         ):
-            epoch_data = _get_feat_array_prediction(
+            epoch_data = _get_prediction_epochs(
                 data=data,
                 events=self.events,
                 events_used=events_used,
                 sfreq=self.sfreq,
-                begin=self.pred_begin,
-                end=self.pred_end,
+                ind_begin=self.pred_begin,
+                ind_end=self.pred_end,
                 verbose=self.verbose,
             )
             if epoch_data is not None:
@@ -397,24 +395,24 @@ class Experiment:
         ch_type: str,
         features_train: pd.DataFrame,
         features_test: pd.DataFrame,
-        y_train: np.ndarray,
-        y_test: np.ndarray,
+        labels_train: np.ndarray,
+        labels_test: np.ndarray,
         groups_train: np.ndarray,
         evs_test: np.ndarray,
     ) -> None:
         """Train model and save results for given channel picks"""
         cols = self._get_column_picks(features_train, ch_pick)
-        X_train, X_test = features_train[cols], features_test[cols]
+        data_train, data_test = features_train[cols], features_test[cols]
 
-        self.decoder.fit(X_train, y_train, groups_train)
+        self.decoder.fit(data_train, labels_train, groups_train)
 
-        score = self.decoder.get_score(X_test, y_test)
+        score = self.decoder.get_score(data_test, labels_test)
 
         feature_importances = _get_importances(
             feature_importance=self.feature_importance,
             decoder=self.decoder,
-            data=X_test,
-            label=y_test,
+            data=data_test,
+            label=labels_test,
             scoring=self.scoring,
         )
 
@@ -461,13 +459,13 @@ class Experiment:
             events_used=events_used,
         )
 
-        features_pred = _get_feat_array_prediction(
+        features_pred = _get_prediction_epochs(
             data=self.features[cols].values,
             events=self.events,
             events_used=events_used,
             sfreq=self.sfreq,
-            begin=self.pred_begin,
-            end=self.pred_end,
+            ind_begin=self.pred_begin,
+            ind_end=self.pred_end,
         )
 
         if features_pred is not None:
@@ -520,10 +518,10 @@ class Experiment:
                 cols = [
                     col for col in features_train.columns if ch_name in col
                 ]
-                X_train = features_train[cols].to_numpy()
-                X_test = features_test[cols].to_numpy()
-                self.decoder.fit(X_train, y_train, groups_train)
-                y_pred = self.decoder.model.predict(X_test)
+                data_train = features_train[cols].to_numpy()
+                data_test = features_test[cols].to_numpy()
+                self.decoder.fit(data_train, y_train, groups_train)
+                y_pred = self.decoder.model.predict(data_test)
                 accuracy = balanced_accuracy_score(y_test, y_pred)
                 results[ch_name].append(accuracy)
         lfp_results = {
@@ -573,28 +571,28 @@ def _get_importances(
     )
 
 
-def _get_feat_array_prediction(
+def _get_prediction_epochs(
     data: np.ndarray,
     events: Union[list, np.ndarray],
     events_used: np.ndarray,
     sfreq: Union[int, float],
-    begin: Union[int, float],
-    end: Union[int, float],
+    ind_begin: Union[int, float],
+    ind_end: Union[int, float],
     verbose: bool = False,
 ) -> Optional[np.ndarray]:
-    """"""
-    begin = int(begin * sfreq)
-    end = int(end * sfreq)
+    """Get epochs of data for making predictions."""
+    ind_begin = int(ind_begin * sfreq)
+    ind_end = int(ind_end * sfreq)
     epochs = []
     for ind in events_used:
-        epoch = data[events[ind] + begin : events[ind] + end + 1]
-        if len(epoch) == end - begin + 1:
+        epoch = data[events[ind] + ind_begin : events[ind] + ind_end + 1]
+        if len(epoch) == ind_end - ind_begin + 1:
             epochs.append(epoch.squeeze())
         else:
             if verbose:
                 print(
                     f"Mismatch of epoch samples. Got: {len(epoch)} "
-                    f"samples. Expected: {end - begin + 1} samples. "
+                    f"samples. Expected: {ind_end - ind_begin + 1} samples. "
                     f"Discarding epoch: No. {ind + 1} of {len(events)}."
                 )
             else:
@@ -605,7 +603,7 @@ def _get_feat_array_prediction(
 
 
 def _transform_side(side: str) -> str:
-    """Transform given keyword to a string for search."""
+    """Transform given keyword (eg 'right') to search string (eg 'R_')."""
     if side == "right":
         return "R_"
     if side == "left":
@@ -616,34 +614,40 @@ def _transform_side(side: str) -> str:
 
 
 def _get_trial_data(
-    data,
+    data: np.ndarray,
     events: np.ndarray,
-    ind: int,
+    event_ind: int,
     target_begin: int,
     target_end: Union[int, str],
     rest_beg_ind: int,
     rest_end_ind: int,
     artifacts: Optional[np.ndarray],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """"""
+    """Get data of single trial for given event index."""
     data_art = None
     if target_end == "trial_end":
         data_rest = data[
-            events[ind] + rest_beg_ind : events[ind] + rest_end_ind
-        ]
-        data_target = data[events[ind] + target_begin : events[ind + 1]]
-        if artifacts is not None:
-            data_art = artifacts[events[ind] + target_begin : events[ind + 1]]
-    else:
-        data_rest = data[
-            events[ind] + rest_beg_ind : events[ind] + rest_end_ind
+            events[event_ind] + rest_beg_ind : events[event_ind] + rest_end_ind
         ]
         data_target = data[
-            events[ind] + target_begin : events[ind] + target_end
+            events[event_ind] + target_begin : events[event_ind + 1]
         ]
         if artifacts is not None:
             data_art = artifacts[
-                events[ind] + target_begin : events[ind] + target_end
+                events[event_ind] + target_begin : events[event_ind + 1]
+            ]
+    else:
+        data_rest = data[
+            events[event_ind] + rest_beg_ind : events[event_ind] + rest_end_ind
+        ]
+        data_target = data[
+            events[event_ind] + target_begin : events[event_ind] + target_end
+        ]
+        if artifacts is not None:
+            data_art = artifacts[
+                events[event_ind]
+                + target_begin : events[event_ind]
+                + target_end
             ]
     if data_art is None:
         data_art = np.atleast_1d([])
@@ -656,7 +660,7 @@ def _discard_trial(
     index_epoch: int,
     bad_epochs: Optional[np.ndarray] = None,
 ) -> bool:
-    """"""
+    """Decide if trial should be discarded."""
     if bad_epochs is None:
         bad_epochs = np.atleast_1d([])
     if any(
@@ -671,9 +675,9 @@ def _discard_trial(
 
 
 def _predict_epochs(
-    model, features: np.ndarray, mode: str, columns: Optional[list] = None
+    model: Any, features: np.ndarray, mode: str, columns: Optional[list] = None
 ) -> list[list]:
-    """Predict single epochs."""
+    """Make predictions for given feature epochs."""
     predictions = []
     if features.ndim < 3:
         np.expand_dims(features, axis=0)
@@ -785,13 +789,13 @@ def _get_baseline_period(
     dist_onset: int,
     dist_end: int,
     artifacts: Optional[np.ndarray],
-) -> Union[int, float]:
-    """"""
-    ind_onset = events[event_ind] - dist_onset
+) -> int:
+    """Return index where baseline period starts."""
+    ind_onset: int = events[event_ind] - dist_onset
     if event_ind != 0:
-        ind_end = events[event_ind - 1] + dist_end
+        ind_end: int = events[event_ind - 1] + dist_end
     else:
-        ind_end = 0
+        ind_end: int = 0
     if ind_onset <= 0:
         baseline = 0
     else:
@@ -799,7 +803,7 @@ def _get_baseline_period(
         if artifacts is not None:
             data_art = artifacts[ind_end:ind_onset]
             bool_art = np.flatnonzero(data_art)
-            ind_art = bool_art[-1] if bool_art.size != 0 else 0.0
+            ind_art = bool_art[-1] if bool_art.size != 0 else 0
             baseline = baseline - ind_art
     return baseline
 

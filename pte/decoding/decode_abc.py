@@ -71,21 +71,22 @@ class Decoder(ABC):
         labels : numpy.ndarray of shape (n_samples, )
             Array of class disribution
         method : {'oversample', 'undersample', 'weight'}
-            Method to be used for rebalancing classes. 'oversample' will upsample
-            the class with less samples. 'undersample' will downsample the class
-            with more samples. 'weight' will generate balanced class weights.
-            Default: 'oversample'
+            Method to be used for rebalancing classes. 'oversample' will
+            upsample the class with less samples. 'undersample' will
+            downsample the class with more samples. 'weight' will generate
+            balanced class weights. Default: 'oversample'
 
         Returns
         -------
         data : numpy.ndarray
             Rebalanced feature array of shape (n_features, n_samples)
         labels : numpy.ndarray
-            Corresponding class distributions. Class sizes are now evenly balanced.
+            Corresponding class distributions. Class sizes are now evenly
+            balanced.
         sample_weight: numpy.ndarray of shape (n_samples, ) | None
             Sample weights if method = 'weight' else None
         """
-        BALANCING_METHODS = [
+        balancing_methods = [
             "oversample",
             "smote",
             "borderline_smote",
@@ -115,10 +116,9 @@ class Decoder(ABC):
                     ros = ADASYN(sampling_strategy="auto", n_neighbors=5)
                     data, labels = ros.fit_resample(data, labels)
                 except ValueError as error:
-                    if (
-                        len(error.args) > 0
-                        and error.args[0]
-                        == "No samples will be generated with the provided ratio settings."
+                    if len(error.args) > 0 and error.args[0] == (
+                        "No samples will be generated with the provided "
+                        "ratio settings."
                     ):
                         pass
                     else:
@@ -131,7 +131,7 @@ class Decoder(ABC):
                     class_weight="balanced", y=labels
                 )
             else:
-                raise BalancingMethodNotFoundError(method, BALANCING_METHODS)
+                raise BalancingMethodNotFoundError(method, balancing_methods)
         return data, labels, sample_weight
 
 
@@ -156,4 +156,7 @@ class BalancingMethodNotFoundError(Exception):
         super().__init__(self.message)
 
     def __str__(self):
-        return f"{{self.message}} Allowed values: {self.allowed}. Got: {self.input_value}."
+        return (
+            f"{{self.message}} Allowed values: {self.allowed}."
+            f" Got: {self.input_value}."
+        )

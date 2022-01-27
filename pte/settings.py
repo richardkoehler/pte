@@ -1,3 +1,5 @@
+"""Configuration settings."""
+
 ECOG_HEMISPHERES = {
     "001": "L",
     "002": "L",

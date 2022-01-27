@@ -15,21 +15,9 @@ def add_squared_channel(
     raw : MNE Raw object
         The MNE Raw object for this function to modify.
     event_id : dict | callable() | None | ‘auto’
-        event_id (see MNE documentation) defining the annotations to be chosen
+        event_id (see MNE documentation) 'defining the annotations to be chosen
         from your Raw object. ONLY pass annotation names that should be used to
-        generate the squared data.
-        Can be:
-            dict: map descriptions (keys) to integer event codes (values). Only
-            the descriptions present will be mapped, others will be ignored.
-            callable: must take a string input and return an integer event code,
-            or return None to ignore the event.
-            None: Map descriptions to unique integer values based on their sorted order.
-            ‘auto’ (default): prefer a raw-format-specific parser:
-                Brainvision: map stimulus events to their integer part; response events
-                to integer part + 1000; optic events to integer part + 2000;
-                ‘SyncStatus/Sync On’ to 99998; ‘New Segment/’ to 99999; all others like
-                None with an offset of 10000.
-                Other raw formats: Behaves like None.
+        generate the squared data'.
     ch_name : str
         Name for the squared channel to be added.
 

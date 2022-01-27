@@ -69,12 +69,11 @@ def bandstop_filter(
             )
         if not fname:
             try:
-                fnames = raw.filenames
                 fname = raw.filenames[0]
-            except ValueError:
+            except ValueError as error:
                 raise ValueError(
                     "If `bandstop_freq` is `'auto'`, `fname` must be provided."
-                )
+                ) from error
         if "StimOn" not in fname:
             return raw
         bandstop_freq = 130

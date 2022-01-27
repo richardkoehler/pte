@@ -1,20 +1,24 @@
 """Plotting functions based on plotly."""
 
+from pathlib import Path
+from typing import Union
 import numpy as np
 import pandas as pd
 from plotly import express
-from scipy.signal import decimate, detrend
+import scipy.signal
+
+import mne
 
 
-def raw_plotly(
-    mne_raw,
-    file_name,
-    t_slice=(),
-    plot_title=None,
-    do_decimate=True,
-    do_normalize=True,
-    do_detrend="linear",
-    padding=2,
+def plotly_mne(
+    mne_raw: mne.io.BaseRaw,
+    file_name: Union[Path, str],
+    time_slice: tuple = (),
+    plot_title: str = None,
+    decimate: bool = True,
+    normalize: bool = True,
+    detrend: str = "linear",
+    padding: Union[int, float] = 2,
 ) -> None:
     """
     Creates (export) the (sliced) MNE raw signal as an HTML plotly plot.
@@ -23,54 +27,55 @@ def raw_plotly(
     ---------
         mne_raw: MNE raw object (output of mne.io.read_raw_...)
         file_name: name (and directory) for the exported html file
-        t_slice: tuple of `start` and `end` slice (seconds)
+        time_slice: tuple of `start` and `end` slice (seconds)
             example: `t_slice = (1, 5)` returns the 1s-5s slice
         plot_title: Plot title (default is None)
-        do_decimate: down-sampling (decimating) the signal to 200Hz sampling rate
-            (default and recommended value is True)
-        do_normalize: dividing the signal by the root mean square value for normalization
-            (default and recommended value is True)
-        do_detrend: The type of detrending.
-            If do_detrend == 'linear' (default), the result of a linear least-squares fit 
-            to data is subtracted from data. If do_detrend == 'constant', only the mean 
-            of data is subtracted. Otherwise, no detrending is performed.
-        padding: multiplication factor for spacing between signals on the y-axis
-            For highly variant data, use higher values. default is 2
+        decimate: down-sampling (decimating) the signal to 200Hz sampling
+            rate (default and recommended value is True)
+        normalize: dividing the signal by the root mean square value for
+            normalization (default and recommended value is True)
+        detrend: The type of detrending.
+            If do_detrend == 'linear' (default), the result of a linear
+            least-squares fit to data is subtracted from data.
+            If do_detrend == 'constant', only the mean of data is subtracted.
+            else, no detrending.
+        padding: multiplication factor for spacing between signals on the
+            y-axis. For highly variant data, use higher values. default is 2.
     """
     samp_freq = int(mne_raw.info["sfreq"])
     channels_array = np.array(mne_raw.info["ch_names"])
-    if t_slice:
+    if time_slice:
         signals_array, time_array = mne_raw[
-            :, t_slice[0] * samp_freq : t_slice[1] * samp_freq
+            :, time_slice[0] * samp_freq : time_slice[1] * samp_freq
         ]
     else:
         signals_array, time_array = mne_raw[:, :]
 
-    sig_plotly(
+    plotly_rawdata(
         time_array,
         signals_array,
         channels_array,
         samp_freq,
         file_name,
         plot_title=plot_title,
-        do_decimate=do_decimate,
-        do_normalize=do_normalize,
-        do_detrend=do_detrend,
+        decimate=decimate,
+        normalize=normalize,
+        detrend=detrend,
         padding=padding,
     )
 
 
-def sig_plotly(
-    time_array,
-    signals_array,
-    channels_array,
-    samp_freq,
-    file_name,
-    plot_title=None,
-    do_decimate=True,
-    do_normalize=True,
-    do_detrend="linear",
-    padding=2,
+def plotly_rawdata(
+    time_array: np.ndarray,
+    signals_array: np.ndarray,
+    channels_array: np.ndarray,
+    sfreq: Union[int, float],
+    file_name: Union[str, Path],
+    plot_title: str = None,
+    decimate: bool = True,
+    normalize: bool = True,
+    detrend: str = "linear",
+    padding: Union[int, float] = 2,
 ) -> None:
     """
     Creates (export) the signals as an HTML plotly plot.
@@ -83,15 +88,15 @@ def sig_plotly(
         samp_freq: sampling frequency (Hz)
         file_name: name (and directory) for the exported html file
         plot_title: Plot title (default is None)
-        do_decimate: down-sampling (decimating) the signal to 200Hz sampling rate
-            (default and recommended value is True)
-        do_normalize: dividing the signal by the root mean square value for normalization
-            (default and recommended value is True)
-        do_detrend: The type of detrending.
-            If do_detrend == 'linear' (default), the result of a linear least-squares fit 
-            to data is subtracted from data.
+        decimate: down-sampling (decimating) the signal to 200Hz sampling
+            rate (default and recommended value is True)
+        normalize: dividing the signal by the root mean square value for
+            normalization (default and recommended value is True)
+        detrend: The type of detrending.
+            If do_detrend == 'linear' (default), the result of a linear
+            least-squares fit to data is subtracted from data.
             If do_detrend == 'constant', only the mean of data is subtracted.
-            else, no detrending
+            else, no detrending.
         padding: multiplication factor for spacing between signals on the
             y-axis. For highly variant data, use higher values. default is 2.
     """
@@ -109,15 +114,15 @@ def sig_plotly(
         signals_array.shape[1] == time_array.shape[0]
     ), "signals_array ! time_array Dimension mismatch!"
 
-    if do_decimate:
-        decimate_factor = min(10, int(samp_freq / 200))
-        signals_array = decimate(signals_array, decimate_factor)
-        time_array = decimate(time_array, decimate_factor)
-    if do_detrend == "linear" or do_detrend == "constant":
-        signals_array = detrend(
-            signals_array, axis=1, type=do_detrend, overwrite_data=True
+    if decimate:
+        decimate_factor = min(10, int(sfreq / 200))
+        signals_array = scipy.signal.decimate(signals_array, decimate_factor)
+        time_array = scipy.signal.decimate(time_array, decimate_factor)
+    if detrend in ("linear", "constant"):
+        signals_array = scipy.signal.detrend(
+            signals_array, axis=1, type=detrend, overwrite_data=True
         )
-    if do_normalize:
+    if normalize:
         eps_ = np.finfo(float).eps
         signals_array = signals_array / (
             _rms(signals_array, axis=1).reshape(-1, 1) + eps_
@@ -156,11 +161,9 @@ def _rms(data: np.ndarray, axis: int = -1) -> np.ndarray:
     """
     Return the Root Mean Square (RMS) value of data along the given axis.
     """
-    assert (
-        axis < data.ndim
-    ), f"No {axis} axis for data with {data.ndim} dimensions!"
+    if axis >= data.ndim:
+        raise ValueError(f"No {axis=} for data with {data.ndim} dimensions!")
 
     if axis < 0:
         return np.sqrt(np.mean(np.square(data)))
-    else:
-        return np.sqrt(np.mean(np.square(data), axis=axis))
+    return np.sqrt(np.mean(np.square(data), axis=axis))

@@ -1,6 +1,6 @@
 """Module to read .mat files."""
 
-import scipy
+import scipy.io
 
 
 def loadmat(filename: str) -> dict:
@@ -51,7 +51,7 @@ def _todict(matobj: scipy.io.matlab.mio5_params.mat_struct) -> dict:
         mat_struct converted to nested dictionary.
     """
     data = {}
-    for strg in matobj._fieldnames:
+    for strg in matobj._fieldnames:  # pylint: disable=protected-access
         elem = matobj.__dict__[strg]
         if isinstance(elem, scipy.io.matlab.mio5_params.mat_struct):
             data[strg] = _todict(elem)

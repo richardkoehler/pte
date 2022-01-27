@@ -39,7 +39,9 @@ def load_results_singlechannel(
             usecols=["channel_name", scoring_key],
         )
         for ch_name in data.index.unique():
-            score = data.loc[ch_name].mean(numeric_only=True).values[0]  # type: ignore
+            score = (
+                data.loc[ch_name].mean(numeric_only=True).values[0]
+            )  # type: ignore
             results.append([subject, ch_name, score])
     columns = [
         "Subject",
@@ -332,12 +334,13 @@ def _handle_baseline(
     ],
     sfreq: Optional[Union[int, float]],
 ) -> tuple[Optional[int], Optional[int]]:
-    """Return baseline start and end values for given baseline and sampling frequency."""
+    """Return baseline start and end indices."""
     if not baseline:
         return None, None
     if any(baseline) and not sfreq:
         raise ValueError(
-            "If `baseline` is any value other than `None`, or `(None, None)`, `sfreq` must be provided."
+            "If `baseline` is any value other than `None`, or `(None, None)`,"
+            f" `sfreq` must be provided. Got: {baseline=}"
         )
     if not sfreq:
         sfreq = 0.0

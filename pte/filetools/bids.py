@@ -25,7 +25,7 @@ def add_coord_column(
         Channels to use for interpolating coordinates for new channel.
     new_ch : str
         Channel name of new channel.
-    
+
     Returns
     -------
     df_chs : pd.DataFrame
@@ -99,12 +99,12 @@ def save_bids_file(
 
 def _get_mapping_dict(ch_names: List[str]) -> dict:
     """Create dictionary for remapping channel types.
-    
+
     Arguments
     ---------
     ch_names : list
         List of channel names to be remapped.
-    
+
     Returns
     -------
     remapping_dict : dict
@@ -140,7 +140,7 @@ def rewrite_bids_file(
         The raw MNE object for this function to write
     bids_path : BIDSPath MNE-BIDS object
         The MNE BIDSPath to the file to be overwritten
-   
+
     Returns
     -------
     raw_new : raw MNE object
@@ -248,7 +248,7 @@ def _rewrite_events(
     in_path: mne_bids.BIDSPath, out_path: mne_bids.BIDSPath
 ) -> None:
     """Rewrite **events.tsv to new location.
-    
+
     Arguments
     ---------
     curr_path : mne_bids.BIDSPath
@@ -266,15 +266,16 @@ def get_bids_electrodes(
     fname: str, root: Optional[str] = None, space: str = "MNI152NLin2009bAsym"
 ) -> tuple[pd.DataFrame, mne_bids.BIDSPath]:
     """Read *electrodes.tsv file and return as pandas DataFrame.
-    
+
     Arguments
     ---------
     fname : str
-        Path to data file for which the corresponding electrodes.tsv file should be read.
+        Path to data file for which the corresponding electrodes.tsv file
+        should be read.
     root : str
         Root of the BIDS dataset
     space : str, default: "MNI152NLin2009bAsym"
-    
+
     Returns
     -------
     pd.DataFrame

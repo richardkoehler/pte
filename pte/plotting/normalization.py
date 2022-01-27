@@ -12,7 +12,7 @@ def scale_minmax(
     key_data: str,
     keys_index: Optional[Union[str, Iterable]] = None,
 ) -> pd.DataFrame:
-    """Group data by given index keys and scale data with MinMax and ."""
+    """Group data by given index keys and scale data with MinMaxScaler."""
     for ind, row in data.iterrows():
         data.loc[ind, "Channel Type"] = (
             "ECOG" if "ECOG" in row["Channel Name"] else "LFP"
@@ -24,11 +24,11 @@ def scale_minmax(
     data = data.sort_index()
     for ind in data.index:
         min_max_scaler = MinMaxScaler(feature_range=(0, 1))
-        X = data.loc[ind, key_data].to_numpy(dtype=np.float32)
-        if X.size == 1:
-            X = X.reshape(1, -1)
+        data_ = data.loc[ind, key_data].to_numpy(dtype=np.float32)
+        if data_.size == 1:
+            data_ = data_.reshape(1, -1)
         else:
-            X = X.reshape(-1, 1)
-        X_scaled = min_max_scaler.fit_transform(X=X).squeeze().round(2)
-        data.loc[ind, key_data] = X_scaled
+            data_ = data_.reshape(-1, 1)
+        data_scaled = min_max_scaler.fit_transform(X=data_).squeeze().round(2)
+        data.loc[ind, key_data] = data_scaled
     return data
