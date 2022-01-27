@@ -1,5 +1,6 @@
 [![Homepage][homepage-shield]][homepage-url]
 [![Contributors][contributors-shield]][contributors-url]
+[![License](license-shield)][license-url]
 
 
 # PTE - Python tools for electrophysiology
@@ -60,3 +61,5 @@ To be added
 [homepage-url]: https://www.icneuromodulation.org/
 [contributors-shield]: https://img.shields.io/github/contributors/richardkoehler/pte.svg?style=for-the-badge
 [contributors-url]: https://github.com/richardkoehler/pte/graphs/contributors
+[license-shield]: https://img.shields.io/badge/license-MIT-blue
+[license-url]: https://github.com/richardkoehler/pte/blob/main/LICENSE
