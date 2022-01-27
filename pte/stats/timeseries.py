@@ -37,7 +37,7 @@ def correct_pvals(
     """Correct p-values for multiple comparisons."""
     if correction_method == "cluster":
         _, signif = pte.stats.clusterwise_pval_numba(
-            p_arr=p_vals, p_sig=alpha, n_perm=n_perm, mode="all"
+            p_values=p_vals, alpha=alpha, n_perm=n_perm, mode="all"
         )
         if len(signif) > 0:
             signif = np.hstack(signif)

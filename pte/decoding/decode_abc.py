@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Optional, Union
 
 import numpy as np
 from imblearn.over_sampling import (
@@ -25,12 +25,12 @@ class Decoder(ABC):
     balancing: Optional[str] = "oversample"
     optimize: bool = False
     model: Any = field(init=False)
-    data_train: np.ndarray = field(init=False)
+    data_train: pd.DataFrame = field(init=False)
     labels_train: np.ndarray = field(init=False)
     groups_train: Iterable = field(init=False)
 
     @abstractmethod
-    def fit(self, data: np.ndarray, labels: np.ndarray, groups) -> None:
+    def fit(self, data: pd.DataFrame, labels: np.ndarray, groups) -> None:
         """Fit model to given training data and training labels."""
 
     def get_score(self, data_test: np.ndarray, label_test: np.ndarray):
@@ -39,20 +39,23 @@ class Decoder(ABC):
 
     @staticmethod
     def _get_validation_split(
-        data: pd.DataFrame, labels: np.ndarray, groups: np.ndarray, train_size: float = 0.8
-    ) -> tuple:
+        data: pd.DataFrame,
+        labels: np.ndarray,
+        groups: np.ndarray,
+        train_size: float = 0.8,
+    ) -> tuple[Union[pd.DataFrame, pd.Series], np.ndarray, list]:
         """Split data into single training and validation set."""
         val_split = GroupShuffleSplit(n_splits=1, train_size=train_size)
-        for train_ind, val_ind in val_split.split(data, labels, groups):
-            data_train, data_val = (
-                data.iloc[train_ind],
-                data.iloc[val_ind],
-            )
-            labels_train, labels_val = (
-                labels[train_ind],
-                labels[val_ind],
-            )
-            eval_set = [(data_val, labels_val)]
+        train_ind, val_ind = next(val_split.split(data, labels, groups))
+        data_train, data_val = (
+            data.iloc[train_ind],
+            data.iloc[val_ind],
+        )
+        labels_train, labels_val = (
+            labels[train_ind],
+            labels[val_ind],
+        )
+        eval_set = [(data_val, labels_val)]
         return data_train, labels_train, eval_set
 
     @staticmethod
@@ -154,4 +157,3 @@ class BalancingMethodNotFoundError(Exception):
 
     def __str__(self):
         return f"{{self.message}} Allowed values: {self.allowed}. Got: {self.input_value}."
-

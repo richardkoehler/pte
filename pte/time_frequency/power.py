@@ -2,11 +2,90 @@
 from pathlib import Path
 from typing import Optional, Union
 
+import matplotlib.figure
+from matplotlib import pyplot as plt
 import mne
 import mne_bids
 import numpy as np
 
 import pte
+
+
+def plot_power_diff(
+    power_0: mne.time_frequency.AverageTFR,
+    power_1: mne.time_frequency.AverageTFR,
+    title: Optional[str] = None,
+    fname: Optional[Union[str, Path]] = None,
+    show: bool = True,
+    kwargs_plot: Optional[dict] = None,
+) -> matplotlib.figure.Figure:
+    """Plot difference of two MNE AverageTFR objects."""
+    power = power_0 - power_1
+    fig, axes = plt.subplots(
+        nrows=1,
+        ncols=1,
+        figsize=(4.75, 3.75),
+        tight_layout=True,
+    )
+    if not kwargs_plot:
+        kwargs_plot = {}
+    kwargs_plot.update(
+        picks="all",
+        cmap="viridis",
+        title=title,
+        show=show,
+        axes=axes,
+        verbose=False,
+    )
+    fig = power.plot(
+        **kwargs_plot,
+    )[0]
+    if show:
+        plt.show(block=True)
+    fig.savefig(
+        fname=fname,
+        dpi=300,
+        bbox_inches="tight",
+    )
+    return fig
+
+
+def plot_power(
+    power: mne.time_frequency.AverageTFR,
+    title: Optional[str] = None,
+    fname: Optional[Union[str, Path]] = None,
+    show: bool = True,
+    kwargs_plot: Optional[dict] = None,
+) -> matplotlib.figure.Figure:
+    """Plot single MNE AverageTFR object."""
+    fig, axes = plt.subplots(
+        nrows=1,
+        ncols=1,
+        figsize=(4.75, 3.75),
+        tight_layout=True,
+    )
+    if not kwargs_plot:
+        kwargs_plot = {}
+    kwargs_plot.update(
+        picks="all",
+        cmap="viridis",
+        title=title,
+        axes=axes,
+        show=show,
+        verbose=False,
+    )
+    fig = power.plot(
+        **kwargs_plot,
+    )[0]
+    if show:
+        plt.show(block=True)
+    if fname:
+        fig.savefig(
+            fname=fname,
+            dpi=300,
+            bbox_inches="tight",
+        )
+    return fig
 
 
 def apply_baseline(
@@ -88,8 +167,6 @@ def _apply_baseline_array(
     fun(data, mean)
 
     power.data = power.data - data
-
-    test = power.data
 
     return power
 

@@ -546,6 +546,15 @@ def _single_lineplot(
         threshold=threshold, sfreq=sfreq, data=data
     )
 
+    # x = np.arange(data.shape[0])
+    # lines = collections.LineCollection(
+    #     [np.column_stack([x, dat_]) for dat_ in data.T],
+    #     color=color,
+    #     linewidth=1,
+    #     alpha=0.5,
+    # )
+    # ax.add_collection(lines)
+
     ax.plot(data.mean(axis=1), color=color, label=label)
     ax.fill_between(
         np.arange(data.shape[0]),
