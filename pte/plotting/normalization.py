@@ -1,8 +1,8 @@
 """Module for scaling and normalizing data before plotting."""
 
 from typing import Iterable, Optional, Union
-import numpy as np
 
+import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 

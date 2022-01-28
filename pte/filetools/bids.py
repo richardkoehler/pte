@@ -6,10 +6,10 @@ from typing import List, Optional
 
 import mne
 import mne_bids
-from mne_bids.path import get_bids_path_from_fname
 import numpy as np
 import pandas as pd
 import pybv
+from mne_bids.path import get_bids_path_from_fname
 
 
 def add_coord_column(

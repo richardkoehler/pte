@@ -3,10 +3,10 @@ from pathlib import Path
 from typing import Optional, Union
 
 import matplotlib.figure
-from matplotlib import pyplot as plt
 import mne
 import mne_bids
 import numpy as np
+from matplotlib import pyplot as plt
 
 import pte
 

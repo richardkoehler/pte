@@ -1,7 +1,7 @@
 """Module for permutation testing."""
 
-from numba import njit
 import numpy as np
+from numba import njit
 
 
 @njit

@@ -5,14 +5,14 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Union
 
 import numpy as np
+import pandas as pd
 from imblearn.over_sampling import (
     ADASYN,
+    SMOTE,
     BorderlineSMOTE,
     RandomOverSampler,
-    SMOTE,
 )
 from imblearn.under_sampling import RandomUnderSampler
-import pandas as pd
 from sklearn.model_selection import GroupShuffleSplit
 from sklearn.utils.class_weight import compute_sample_weight
 

@@ -1,5 +1,6 @@
 """Module for calculating earliest significant time point of prediction."""
 from typing import Iterable, Optional, Union
+
 import numpy as np
 
 import pte

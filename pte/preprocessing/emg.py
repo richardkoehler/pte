@@ -1,10 +1,10 @@
 """Module for processing of EMG channels."""
 
 from typing import Iterable, Union
-from numba import njit
-import numpy as np
 
 import mne
+import numpy as np
+from numba import njit
 
 
 def get_emg_rms(

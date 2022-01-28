@@ -1,8 +1,8 @@
 """Define abstract base classes to construct FileFinder classes."""
 
+import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-import os
 from pathlib import Path
 from typing import List, Optional, Union
 

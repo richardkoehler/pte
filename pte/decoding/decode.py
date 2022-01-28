@@ -4,9 +4,9 @@ from dataclasses import dataclass
 from typing import Any, Optional, Union
 
 import numpy as np
+import pandas as pd
 from bayes_opt import BayesianOptimization
 from catboost import CatBoostClassifier
-import pandas as pd
 from sklearn.discriminant_analysis import (
     LinearDiscriminantAnalysis,
     QuadraticDiscriminantAnalysis,
@@ -14,7 +14,7 @@ from sklearn.discriminant_analysis import (
 from sklearn.dummy import DummyClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import balanced_accuracy_score, log_loss
-from sklearn.model_selection import GroupShuffleSplit, GroupKFold
+from sklearn.model_selection import GroupKFold, GroupShuffleSplit
 
 # from sklearn.svm import SVC
 from xgboost import XGBClassifier
