@@ -38,7 +38,7 @@ jobs:
     - name: Lint with isort
       run: |
         pip install isort
-        isort $(git ls-files '*.py') --show-config
+        isort $(git ls-files '*.py') --verbose
 
     - name: Format with black
       run: |
