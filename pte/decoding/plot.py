@@ -6,10 +6,10 @@ from typing import Callable, Iterable, Optional, Union
 
 import numpy as np
 import pandas as pd
-from scipy import stats
 import seaborn as sns
 from matplotlib import axes, cm, collections, figure, patheffects
 from matplotlib import pyplot as plt
+from scipy import stats
 from statannotations import Annotator
 from statannotations.stats import StatTest
 

@@ -1,16 +1,16 @@
 """Module for plotting quantitave results onto brain structures."""
 import copy
 import os
-from typing import Optional, Union
 from pathlib import Path
+from typing import Optional, Union
 
-import scipy
 import numpy as np
 import pandas as pd
-from matplotlib import collections, cm, ticker
+import scipy
+from matplotlib import cm, collections
 from matplotlib import pyplot as plt
+from matplotlib import ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
 
 RESOURCES = Path(__file__).parent / "resources"
 # faces = scipy.io.loadmat(r"resources/faces.mat")

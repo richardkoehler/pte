@@ -1,6 +1,7 @@
 """Module for processing channels in electrophysiological data."""
 
 from typing import List
+
 import mne
 import numpy as np
 

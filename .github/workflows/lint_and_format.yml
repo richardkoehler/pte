@@ -30,18 +30,17 @@ jobs:
       run: |
         python -m pip install --upgrade pip
 
-    - name: Lint the code with pylint
-      run: |
-        pip install pylint
-        pylint --rcfile pylintrc $(git ls-files '*.py')
-
     - name: Lint with isort
       run: |
         pip install isort
-        isort $(git ls-files '*.py')
+        isort $(git ls-files '*.py') --verbose
 
     - name: Format with black
       run: |
         pip install black
         black . --verbose
 
+    - name: Lint the code with pylint
+      run: |
+        pip install pylint
+        pylint --rcfile pylintrc $(git ls-files '*.py')

@@ -1,8 +1,8 @@
 """Module for cluster-based statistics."""
 from typing import Iterable, Optional
-from matplotlib import pyplot as plt
 
 import numpy as np
+from matplotlib import pyplot as plt
 from numba import njit
 from skimage import measure
 

@@ -2,12 +2,12 @@
 
 from pathlib import Path
 from typing import Union
-import numpy as np
-import pandas as pd
-from plotly import express
-import scipy.signal
 
 import mne
+import numpy as np
+import pandas as pd
+import scipy.signal
+from plotly import express
 
 
 def plotly_mne(
