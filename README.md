@@ -6,17 +6,19 @@
 
 # PTE - Python tools for electrophysiology
 
-PTE is an open-source non-comprehensive software package that provides functionality for working with electrophysiological data.
+PTE is an open-source software package for working with electrophysiological data.
+
+PTE builds upon the packages [MNE](https://mne.tools/stable/index.html) and [MNE-BIDS](https://mne.tools/mne-bids/stable/index.html).
 
 ## Installing PTE
 
-First, get the current development version of PTE using [git](https://git-scm.com/). Then type the following command into a terminal:
+First, get the current development version of PTE using [git](https://git-scm.com/). Type the following command into a terminal:
 
 ```bash
 git clone https://github.com/richardkoehler/pte
 ```
 
-Use the package manager [conda](https://docs.conda.io/projects/conda/en/latest/index.html) to set up a new working environment. To do so, use ``cd`` in your terminal to navigate to the PTE root directory and type:
+Use the package manager [conda](https://docs.conda.io/projects/conda/en/latest/index.html) to set up a new working environment. To do so navigate to the PTE root directory in your terminal and type:
 
 ```bash
 conda env create -f environment.yml
@@ -45,16 +47,17 @@ import pte
 ```
 
 ## Contributing
-Please feel free to contribute. 
+Please feel free to contribute yourselves or to open an **issue** when you encounter a bug or would like to add a new feature.
 
 For any minor additions or bugfixes, you may simply create a **pull request**. 
 
 For any major changes, make sure to open an **issue** first. When you then create a pull request, be sure to **link the pull request** to the open issue in order to close the issue automatically after merging.
 
-To contribute, consider installing the full conda development environment to include such tools as black, pylint and isort:
+To contribute yourselves, consider installing the full conda development environment to include such tools as black, pylint and isort:
 
 ```bash
-conda env create -f environment_dev.yml
+conda env create -f env_dev.yml
+conda activate pte-dev
 ```
 
 Continuous Integration (CI) including automated testing are set up.
