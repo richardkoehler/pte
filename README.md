@@ -6,7 +6,7 @@
 
 # PTE - Python tools for electrophysiology
 
-PTE is an open-source software package for working with electrophysiological data.
+PTE is an open-source software package for working with electrophysiological data
 
 PTE builds upon the packages [MNE](https://mne.tools/stable/index.html) and [MNE-BIDS](https://mne.tools/mne-bids/stable/index.html).
 
@@ -21,7 +21,7 @@ git clone https://github.com/richardkoehler/pte
 Use the package manager [conda](https://docs.conda.io/projects/conda/en/latest/index.html) to set up a new working environment. To do so navigate to the PTE root directory in your terminal and type:
 
 ```bash
-conda env create -f environment.yml
+conda env create -f env.yml
 ```
 
 This will set up a new conda environment called ``pte``.
@@ -32,7 +32,7 @@ To activate the environment then type:
 conda activate pte
 ```
 
-Finally, to install PTE in an editable development version inside your conda enviroment type the following inside the PTE root directory:
+Finally, to install PTE in an editable development version inside your conda environment type the following inside the PTE root directory:
 
 ```bash
 conda develop .
