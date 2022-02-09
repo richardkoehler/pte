@@ -15,9 +15,12 @@ dependencies:
   - plotly
   - python>=3.9
   - scikit-image
-  - scipy    
+  - scipy
+  - pip:
+    - pte-stats    
   # development dependencies
   - black
   - isort
+  - mypy
   - pylint
   - pytest
