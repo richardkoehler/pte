@@ -60,13 +60,15 @@ repository = "https://github.com/richardkoehler/pte"
 [tool.black]
 exclude = '''
 /(
-  __pycache__
+    __pycache__
+  | plotting/resources
 )/
+
 '''
 include = '''
 (
     /tests
-  | src/
+  | /src
 )
 '''
 line-length = 79
