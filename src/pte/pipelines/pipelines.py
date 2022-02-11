@@ -1,4 +1,5 @@
 """Module for predefined processing pipelines."""
+from pathlib import Path
 from typing import Optional, Union
 
 import mne
@@ -23,11 +24,16 @@ def add_emg_rms(
     else:
         raw = raw_or_file
 
+    if raw.filenames:
+        prefix = f"File: {Path(raw.filenames[0]).name}. "
+    else:
+        prefix = ""
+
     raw.plot(
         scalings="auto",
         block=True,
         title=(
-            "Raw data loaded from file. Please check for bad channels and"
+            f"{prefix}Please check for bad channels and"
             " close window for code to continue to run."
         ),
     )
@@ -62,7 +68,7 @@ def add_emg_rms(
                 title="SQUARED_EMG channel added. Please check this channel.",
             )
 
-    if out_path is not None:
+    if out_path:
         raw = pte.filetools.rewrite_bids_file(
             raw=raw, bids_path=out_path, reorder_channels=True
         )
