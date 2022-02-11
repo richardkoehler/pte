@@ -18,7 +18,7 @@ def add_emg_rms(
     """Add EMG root mean square channels to Raw object and save."""
     if isinstance(raw_or_file, mne_bids.BIDSPath):
         raw: mne.io.BaseRaw = mne_bids.read_raw_bids(  # type: ignore
-            file, verbose=False
+            raw_or_file, verbose=False
         )
     else:
         raw = raw_or_file

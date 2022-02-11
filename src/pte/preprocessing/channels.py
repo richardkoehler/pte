@@ -59,7 +59,7 @@ def add_emg_rms(
         new_ch_name = "_".join(
             ("EMG", side, "BR", "RMS", str(window_duration))
         )
-    raw._orig_units[rms_channel] = "µV"
+    raw._orig_units[rms_channel] = "µV"  # pylint: disable=protected-access
     raw = raw.rename_channels({rms_channel: new_ch_name})
 
     return raw
