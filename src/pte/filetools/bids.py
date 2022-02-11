@@ -1,11 +1,14 @@
 """Module for handling datasets in BIDS-format."""
 
+from collections import defaultdict
 import os
 import shutil
-from typing import List, Optional
+from pathlib import Path
+from typing import Optional, Union
 
 import mne
 import mne_bids
+import mne_bids.copyfiles
 import numpy as np
 import pandas as pd
 import pybv
@@ -13,7 +16,7 @@ from mne_bids.path import get_bids_path_from_fname
 
 
 def add_coord_column(
-    df_chs: pd.DataFrame, ch_names: List[str], new_ch: str
+    df_chs: pd.DataFrame, ch_names: list[str], new_ch: str
 ) -> pd.DataFrame:
     """Add column by interpolating coordinates from given channels.
 
@@ -97,13 +100,13 @@ def save_bids_file(
     return raw
 
 
-def _get_mapping_dict(ch_names: List[str]) -> dict:
+def _get_mapping_dict(ch_names: list[str]) -> dict:
     """Create dictionary for remapping channel types.
 
     Arguments
     ---------
     ch_names : list
-        List of channel names to be remapped.
+        Channel names to be remapped.
 
     Returns
     -------
@@ -130,136 +133,252 @@ def _get_mapping_dict(ch_names: List[str]) -> dict:
 
 
 def rewrite_bids_file(
-    raw: mne.io.Raw, bids_path: mne_bids.BIDSPath
-) -> mne.io.Raw:
+    raw: mne.io.BaseRaw,
+    bids_path: mne_bids.BIDSPath,
+    reorder_channels: bool = True,
+) -> mne.io.BaseRaw:
     """Overwrite BrainVision data in BIDS format that has been modified.
 
     Parameters
     ----------
-    raw : raw MNE object
+    raw : mne.Raw object
         The raw MNE object for this function to write
-    bids_path : BIDSPath MNE-BIDS object
-        The MNE BIDSPath to the file to be overwritten
+    bids_path : mne_bids.BIDSPath
+        The MNE BIDSPath to be overwritten
+    reorder_channels : bool. Default: True
+        Set to false if channels should not be reordered
 
     Returns
     -------
     raw_new : raw MNE object
         The newly written raw object.
     """
-    curr_path = bids_path.copy().update(
+    current_path = bids_path.copy().update(
         suffix=bids_path.datatype, extension=None
     )
-    raw_copy = raw.copy()
-    working_dir = curr_path.directory
+    current_dir = current_path.directory
 
-    temp_root = os.path.join(working_dir, "temp")
-    if not os.path.isdir(temp_root):
-        os.mkdir(temp_root)
-    temp_path = curr_path.copy().update(root=temp_root)
-    raw.set_montage(None)
-    mne_bids.write_raw_bids(
-        raw_copy,
-        temp_path,
-        allow_preload=True,
-        format="BrainVision",
-        verbose=False,
-    )
+    # Create backup directory
+    backup_dir = Path(current_dir, "backup")
+    # Backup files
+    _backup_files(current_path, backup_dir)
 
-    # Rewrite BrainVision files
-    mne_bids.copyfiles.copyfile_brainvision(temp_path, curr_path.fpath)
+    try:
+        # Create temporary working directory
+        temp_dir = Path(backup_dir, "temp")
+        temp_dir.mkdir(exist_ok=False)
+        temp_path = current_path.copy().update(root=temp_dir)
+        raw = raw.copy()
+        raw.set_montage(None)
 
-    _rewrite_events(temp_path, curr_path)
+        if reorder_channels:
+            raw = raw.reorder_channels(sorted(raw.ch_names))
 
-    # Rewrite **channels.tsv
-    channels_path = bids_path.copy().update(
-        suffix="channels", extension=".tsv"
-    )
-    df_chs = pd.read_csv(channels_path.fpath, sep="\t", index_col=0)
-    old_chs = df_chs.index.tolist()
-    add_chs = [ch for ch in raw.ch_names if ch not in old_chs]
-    description = {
-        "seeg": "StereoEEG",
-        "ecog": "Electrocorticography",
-        "eeg": "Electroencephalography",
-        "emg": "Electromyography",
-        "misc": "Miscellaneous",
-        "dbs": "Deep Brain Stimulation",
-    }
-    if add_chs:
-        add_list = []
-        ch_types = raw_copy.get_channel_types(picks=add_chs)
-        print("Added channels: ", add_chs)
-        print("Added channel types: ", ch_types)
-        for idx in range(len(add_chs)):
-            add_dict = {
-                df_chs.columns[i]: df_chs.iloc[0][i]
-                for i in range(0, len(df_chs.columns))
-            }
-            add_dict.update({"type": ch_types[idx].upper()})
-            add_dict.update({"description": description.get(ch_types[idx])})
-            add_list.append(add_dict)
-        index = pd.Index(add_chs, name="name")
-        df_add = pd.DataFrame(add_list, index=index)
-        df_chs = df_chs.append(df_add, ignore_index=False)
-    remov_chs = [ch for ch in old_chs if ch not in raw_copy.ch_names]
-    if remov_chs:
-        df_chs = df_chs.drop(remov_chs)
-    df_chs = df_chs.reindex(raw_copy.ch_names)
-    os.remove(channels_path.fpath)
-    df_chs.to_csv(
-        os.path.join(working_dir, channels_path.basename),
-        sep="\t",
-        na_rep="n/a",
-        index=True,
-    )
-
-    # Rewrite **electrodes.tsv
-    elec_files = []
-    for file in os.listdir(working_dir):
-        if file.endswith("_electrodes.tsv") and "_space-" in file:
-            elec_files.append(os.path.join(working_dir, file))
-    for elec_file in elec_files:
-        df_chs = pd.read_csv(elec_file, sep="\t", index_col=0)
-        old_chs = df_chs.index.tolist()
-        add_chs = [
-            ch
-            for ch, ch_type in zip(raw.ch_names, raw.get_channel_types())
-            if all((ch not in old_chs, ch_type in ["ecog", "dbs", "seeg"]))
-        ]
-        add_list = []
-        for _ in add_chs:
-            add_dict = {}
-            add_dict.update({column: "n/a" for column in df_chs.columns})
-            add_list.append(add_dict)
-        index = pd.Index(add_chs, name="name")
-        df_add = pd.DataFrame(add_list, index=index)
-        df_chs = df_chs.append(df_add, ignore_index=False)
-        df_chs.to_csv(
-            os.path.join(elec_file), sep="\t", na_rep="n/a", index=True
+        mne_bids.write_raw_bids(
+            raw,
+            temp_path,
+            allow_preload=True,
+            format="BrainVision",
+            verbose=False,
         )
-    # Remove temporary working folder
-    shutil.rmtree(temp_root)
-    # Check for success
-    raw = mne_bids.read_raw_bids(bids_path, verbose=False)
+
+        # Rewrite BrainVision files
+        mne_bids.copyfiles.copyfile_brainvision(temp_path, current_path.fpath)
+
+        # Rewrite *events.tsv
+        _rewrite_events(temp_path, current_path)
+
+        # Rewrite *channels.tsv
+        _rewrite_channels(current_path, raw)
+
+        # Rewrite *electrodes.tsv
+        for file in Path(current_dir).glob("*electrodes.tsv"):
+            _rewrite_electrodes(file=file, raw=raw)
+
+        # Check for success
+        raw = mne_bids.read_raw_bids(bids_path, verbose=False)
+    except Exception as exception:
+        for file in Path(backup_dir).glob("*"):
+            if file.is_file():
+                shutil.copy(file, current_dir)
+        raise exception
+    finally:
+        # Clean up
+        shutil.rmtree(backup_dir)
+
     return raw
+
+
+def _backup_files(current_path: mne_bids.BIDSPath, backup_dir: Path) -> None:
+    """Create backup of BIDS files."""
+    backup_dir.mkdir(exist_ok=True)
+    try:
+        backup_path = (backup_dir / current_path.basename).with_suffix(".vhdr")
+        mne_bids.copyfiles.copyfile_brainvision(
+            current_path.fpath, backup_path
+        )
+
+        channels_path = current_path.copy()
+        channels_path.update(suffix="channels", extension=".tsv")
+        shutil.copy(channels_path.fpath, backup_dir)
+
+        for file in Path(current_path.directory).glob("*electrodes.tsv"):
+            shutil.copy(file, backup_dir)
+
+        events_path = current_path.copy()
+        events_path.update(suffix="events", extension=".tsv")
+        if events_path.fpath.exists():
+            shutil.copy(events_path.fpath, backup_dir)
+
+    except Exception as error:
+        shutil.rmtree(backup_dir)
+        raise error
 
 
 def _rewrite_events(
     in_path: mne_bids.BIDSPath, out_path: mne_bids.BIDSPath
 ) -> None:
-    """Rewrite **events.tsv to new location.
+    """Rewrite *events.tsv to new location.
 
     Arguments
     ---------
-    curr_path : mne_bids.BIDSPath
-        BIDSPath object for input path.
+    in_path : mne_bids.BIDSPath
+        Input path.
     out_path : mne_bids.BIDSPath
-        BIDSPath object for output path.
+        Output path.
     """
-    original_path = in_path.copy().update(suffix="events").fpath
-    out_path = out_path.copy().update(suffix="events")
-    target_path = os.path.join(out_path.directory, out_path.basename + ".tsv")
-    shutil.copyfile(original_path, target_path)
+    in_path = in_path.copy()
+    in_path.update(suffix="events", extension=".tsv")
+    out_path = out_path.copy()
+    out_path.update(suffix="events", extension="tsv")
+    shutil.copyfile(in_path.fpath, out_path.fpath)
+
+
+def _get_description(channel_type: str) -> str:
+    """Get channel type description."""
+    description = defaultdict(lambda: "Other type of channel")
+    description.update(
+        meggradaxial="Axial Gradiometer",
+        megrefgradaxial="Axial Gradiometer Reference",
+        meggradplanar="Planar Gradiometer",
+        megmag="Magnetometer",
+        megrefmag="Magnetometer Reference",
+        meg="MagnetoEncephaloGram",
+        stim="Trigger",
+        eeg="ElectroEncephaloGram",
+        ecog="Electrocorticography",
+        seeg="StereoEEG",
+        ecg="ElectroCardioGram",
+        eog="ElectroOculoGram",
+        emg="ElectroMyoGram",
+        misc="Miscellaneous",
+        bio="Biological",
+        ias="Internal Active Shielding",
+        dbs="Deep Brain Stimulation",
+    )
+    return description[channel_type]
+
+
+def _get_group(channel_name: str) -> str:
+    """Get group for corresponding channel name."""
+    sides = defaultdict(lambda: "")
+    sides.update(L="left", R="right")
+    groups = defaultdict(lambda: "n/a")
+    groups.update(
+        MEG="MEG",
+        ACC="accelerometer",
+        EEG="EEG",
+        ECOG="ECOG",
+        SEEG="SEEG",
+        ECG="ECG",
+        EOG="EOG",
+        EMG="EMG",
+        MISC="MISC",
+        LFP="DBS",
+    )
+    items = channel_name.split("_")
+    return f"{groups[items[0]]}_{sides[items[1]]}"
+
+
+def _rewrite_channels(
+    bids_path: mne_bids.BIDSPath, raw: mne.io.BaseRaw
+) -> None:
+    """Update and rewrite electrodes.tsv file."""
+
+    channels_path = bids_path.copy().update(
+        suffix="channels", extension=".tsv"
+    )
+
+    data_old: pd.DataFrame = pd.read_csv(  # type: ignore
+        channels_path.fpath, sep="\t", index_col=0
+    )
+    channels_old = data_old.index.tolist()
+    channels_new = raw.ch_names
+
+    channels_to_add = [ch for ch in channels_new if ch not in channels_old]
+
+    if channels_to_add:
+        add_list = []
+        ch_types = raw.get_channel_types(picks=channels_to_add)
+        for ch_name, ch_type in zip(channels_to_add, ch_types):
+            add_dict = {
+                data_old.columns[i]: data_old.iloc[0][i]
+                for i in range(len(data_old.columns))
+            }
+            add_dict.update(
+                description=_get_description(ch_type),
+                type=ch_type.upper(),
+                group=_get_group(ch_name),
+            )
+            add_list.append(add_dict)
+        print(f"Added channels: {channels_to_add}")
+        print(f"Added channel types: {ch_types}")
+
+        index = pd.Index(channels_to_add, name="name")
+        data_to_add = pd.DataFrame(add_list, index=index)
+        data_old = data_old.append(data_to_add, ignore_index=False)
+
+        channels_to_remove = [
+            ch for ch in channels_old if ch not in raw.ch_names
+        ]
+        if channels_to_remove:
+            data_old = data_old.drop(channels_to_remove)
+
+        data_old = data_old.reindex(index=channels_new)
+
+        data_old.to_csv(
+            channels_path.fpath,
+            sep="\t",
+            na_rep="n/a",
+            index=True,
+            index_label="name",
+        )
+
+
+def _rewrite_electrodes(file: Union[str, Path], raw: mne.io.BaseRaw) -> None:
+    """Update and rewrite electrodes.tsv file."""
+    data_old: pd.DataFrame = pd.read_csv(  # type: ignore
+        file, sep="\t", index_col=0
+    )
+    electrodes_old = data_old.index.tolist()
+
+    electrodes_to_add = []
+    for ch_name, ch_type in zip(raw.ch_names, raw.get_channel_types()):
+        if (ch_name not in electrodes_old) and (
+            ch_type in ["ecog", "dbs", "seeg", "eeg"]
+        ):
+            electrodes_to_add.append(ch_name)
+
+    data_to_add = pd.DataFrame(
+        data=None, index=electrodes_to_add, columns=data_old.columns
+    )
+
+    data_old = data_old.append(data_to_add, ignore_index=False)
+    data_old.sort_index(axis=0, inplace=True)
+
+    data_old.to_csv(
+        file, sep="\t", na_rep="n/a", index=True, index_label="name"
+    )
 
 
 def get_bids_electrodes(

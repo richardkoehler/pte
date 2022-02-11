@@ -4,7 +4,7 @@ import os
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import mne_bids
 
@@ -85,7 +85,7 @@ class FileFinder(ABC):
         directory: Union[Path, str],
         keywords: Optional[Union[list, str]] = None,
         extensions: Optional[Union[list, str]] = None,
-    ) -> List[str]:
+    ) -> list[str]:
         """Find all files in directory with optional
         keywords and extensions.
 
@@ -113,7 +113,7 @@ class FileFinder(ABC):
         stimulation: Optional[str] = None,
         medication: Optional[str] = None,
         exclude: Optional[Union[str, list[str]]] = None,
-    ) -> List[str]:
+    ) -> list[str]:
         """Filter filepaths for given parameters and return filtered list."""
         filtered_files = self.files
         if exclude:
