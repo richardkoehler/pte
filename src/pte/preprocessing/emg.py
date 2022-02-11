@@ -1,6 +1,6 @@
 """Module for processing of EMG channels."""
 
-from typing import Iterable, Union
+from typing import Optional, Sequence, Union
 
 import mne
 import numpy as np
@@ -8,13 +8,13 @@ from numba import njit
 
 
 def get_emg_rms(
-    raw: mne.io.Raw,
+    raw: mne.io.BaseRaw,
     emg_ch: Union[str, list[str], np.ndarray],
-    window_len: Union[float, int, Iterable],
-    analog_ch: Union[list, str],
+    window_duration: Union[float, int, Sequence],
+    analog_ch: Optional[Union[list[str], str]] = None,
     rereference: bool = False,
     notch_filter: Union[float, int] = 50,
-) -> mne.io.Raw:
+) -> mne.io.BaseRaw:
     """Return root mean square with given window length of raw object.
 
     Parameters
@@ -23,8 +23,8 @@ def get_emg_rms(
         The data to be processed.
     emg_ch : list of str
         The EMG channels to be processed. Must be of length 1 or 2.
-    window_len : float | int | array-like of float/int
-        Window length(s) for root mean square calculation in milliseconds.
+    window_duration : float | int | array-like of float/int
+        Window duration(s) for root mean square calculation in milliseconds.
     analog_ch : str | list of str
         The target channel (e.g., rotameter) to be added to output raw object.
     rereference : boolean (optional)
@@ -37,8 +37,13 @@ def get_emg_rms(
         Raw object containing root mean square of windowed signal and target
         channel.
     """
+    raw_emg = raw.copy()
+    raw_emg.pick(picks=emg_ch)
 
-    raw_emg = raw.copy().pick(picks=emg_ch).load_data(verbose=False)
+    if not raw_emg.preload:
+        print("Loading data")
+        raw_emg.load_data()
+
     raw_emg.set_channel_types(
         mapping={name: "eeg" for name in raw_emg.ch_names}
     )
@@ -60,32 +65,47 @@ def get_emg_rms(
         assert isinstance(notch_filter, (int, float))
         freqs = np.arange(notch_filter, raw.info["sfreq"] / 2, notch_filter)
         raw_emg = raw_emg.notch_filter(freqs=freqs, picks="emg", verbose=False)
-    raw_filt = raw_emg.filter(
+    raw_filtered = raw_emg.filter(
         l_freq=15, h_freq=500, picks="all", verbose=False
     )
-    if isinstance(window_len, (int, float)):
-        window_len = [window_len]
-    data = raw_filt.get_data()[0]
-    data_arr = np.empty((len(window_len), len(data)))
-    for idx, window in enumerate(window_len):
+    if isinstance(window_duration, (int, float)):
+        window_duration = [window_duration]
+
+    data = raw_filtered.get_data()[0]
+    data_arr = np.empty((len(window_duration), len(data)))
+
+    for idx, window in enumerate(window_duration):
         data_rms = _rms_window_nb(data, window, raw.info["sfreq"])
         data_rms_zx = (data_rms - np.mean(data_rms)) / np.std(data_rms)
         data_arr[idx, :] = data_rms_zx
-    data_analog = raw.copy().pick(picks=analog_ch).get_data()[0]
-    if np.abs(min(data_analog)) > max(data_analog):
-        data_analog = data_analog * -1
-    data_all = np.vstack((data_analog, data_bip, data_arr))
-    emg_ch_names = ["EMG_RMS_" + str(window) for window in window_len]
+
+    emg_ch_names = [f"EMG_RMS_{window}" for window in window_duration]
+
+    if analog_ch:
+        if isinstance(analog_ch, str):
+            analog_ch = [analog_ch]
+        data_analog = raw.copy().pick(picks=analog_ch).get_data()[0]
+        if np.abs(min(data_analog)) > max(data_analog):
+            data_analog = data_analog * -1
+        data_all = np.vstack((data_analog, data_bip, data_arr))
+        ch_names = analog_ch + ["EMG_BIP"] + emg_ch_names
+    else:
+        data_all = np.vstack((data_bip, data_arr))
+        ch_names = ["EMG_BIP"] + emg_ch_names
+
+    # Create new raw object
     info_rms = mne.create_info(
-        ch_names=[analog_ch] + ["EMG_BIP"] + emg_ch_names,
-        ch_types="emg",
+        ch_names=ch_names,
+        ch_types="misc",
         sfreq=raw.info["sfreq"],
     )
     raw_rms = mne.io.RawArray(data=data_all, info=info_rms, verbose=False)
-    raw_rms.info["meas_date"] = raw.info["meas_date"]
+    raw_rms.set_meas_date(raw.info["meas_date"])
     raw_rms.info["line_freq"] = raw.info["line_freq"]
     raw_rms.set_annotations(raw.annotations)
-    raw_rms.set_channel_types({analog_ch: "misc"})
+    raw_rms.set_channel_types(
+        {ch: "emg" for ch in raw_rms.ch_names if "EMG" in ch}
+    )
     return raw_rms
 
 
