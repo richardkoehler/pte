@@ -6,7 +6,7 @@ from typing import Optional, Union
 
 import mne_bids
 
-from .filefinder_abc import DirectoryNotFoundError, FileFinder
+from pte.filetools.filefinder_abc import DirectoryNotFoundError, FileFinder
 
 
 @dataclass

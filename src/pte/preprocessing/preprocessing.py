@@ -110,7 +110,8 @@ def preprocess(
         fname = str(fname)
 
     raw = raw.pick(picks=["ecog", "dbs"], verbose=False)
-    raw = raw.load_data(verbose=False)
+    if not raw.preload:
+        raw.load_data(verbose=False)
     raw = raw.resample(sfreq=resample_freq, verbose=False)
     notch_freqs = np.arange(line_freq, raw.info["sfreq"] / 2, line_freq)
     raw = raw.notch_filter(notch_freqs, verbose=False)

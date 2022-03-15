@@ -2,8 +2,8 @@
 
 from . import (
     filetools,
+    pipelines,
     plotting,
     preprocessing,
-    stats,
     time_frequency,
 )
