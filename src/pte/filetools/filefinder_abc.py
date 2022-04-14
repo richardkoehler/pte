@@ -1,6 +1,7 @@
 """Define abstract base classes to construct FileFinder classes."""
 
 import os
+import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,13 +9,12 @@ from typing import Optional, Union
 
 import mne_bids
 
-from .. import settings
-
 
 @dataclass
 class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
+    hemispheres: Union[dict, None] = field(default_factory=dict)
     directory: Union[Path, str] = field(init=False)
     files: list = field(init=False, default_factory=list)
 
@@ -24,6 +24,7 @@ class FileFinder(ABC):
         headers = ["Index", "Filename"]
         col_width = max(len(os.path.basename(file)) for file in self.files)
         format_row = f"{{:>{len(headers[0]) + 2}}}{{:>{col_width + 2}}}"
+        terminal_size = "\u2500" * shutil.get_terminal_size().columns
         return "\n".join(
             (
                 "Corresponding files found:",
@@ -31,7 +32,7 @@ class FileFinder(ABC):
                     f"{{:>{len(header) + 2}}}".format(header)
                     for header in headers
                 ),
-                "\u2500" * os.get_terminal_size().columns,
+                terminal_size,
                 *(
                     format_row.format(idx, os.path.basename(file))
                     for idx, file in enumerate(self.files)
@@ -48,8 +49,12 @@ class FileFinder(ABC):
     def find_files(
         self,
         directory: Union[str, Path],
-        keywords: Optional[Union[list, str]] = None,
         extensions: Optional[Union[list, str]] = None,
+        keywords: Optional[Union[list, str]] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[Union[str, list]] = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -83,11 +88,9 @@ class FileFinder(ABC):
     def _find_files(
         self,
         directory: Union[Path, str],
-        keywords: Optional[Union[list, str]] = None,
         extensions: Optional[Union[list, str]] = None,
-    ) -> list[str]:
-        """Find all files in directory with optional
-        keywords and extensions.
+    ) -> None:
+        """Find files in directory with optional extensions.
 
         Args:
             directory (string)
@@ -99,12 +102,10 @@ class FileFinder(ABC):
         files = []
         for root, _, fnames in os.walk(directory):
             fnames = [os.path.join(root, file) for file in fnames]
-            fnames = self._keyword_search(fnames, keywords)
             fnames = self._keyword_search(fnames, extensions)
             if fnames:
                 files.extend(fnames)
-
-        return files
+        self.files = files
 
     def _filter_files(
         self,
@@ -113,8 +114,8 @@ class FileFinder(ABC):
         stimulation: Optional[str] = None,
         medication: Optional[str] = None,
         exclude: Optional[Union[str, list[str]]] = None,
-    ) -> list[str]:
-        """Filter filepaths for given parameters and return filtered list."""
+    ) -> None:
+        """Filter filepaths for given parameters."""
         filtered_files = self.files
         if exclude:
             if not isinstance(exclude, list):
@@ -149,20 +150,19 @@ class FileFinder(ABC):
             for file in filtered_files:
                 subject = mne_bids.get_entities_from_fname(file)["subject"]
                 if (
-                    subject not in settings.ECOG_HEMISPHERES
-                    or settings.ECOG_HEMISPHERES[subject] is None
+                    subject not in self.hemispheres
+                    or self.hemispheres[subject] is None
                 ):
                     raise HemisphereNotSpecifiedError(
-                        subject, settings.ECOG_HEMISPHERES
+                        subject, self.hemispheres
                     )
-                hem = settings.ECOG_HEMISPHERES[subject] + "_"
+                hem = self.hemispheres[subject] + "_"
                 if hemisphere.lower() in "ipsilateral" and hem in file:
                     matching_files.append(file)
                 if hemisphere.lower() in "contralateral" and hem not in file:
                     matching_files.append(file)
             filtered_files = matching_files
         self.files = filtered_files
-        return filtered_files
 
 
 class DirectoryNotFoundError(Exception):
@@ -199,8 +199,8 @@ class HemisphereNotSpecifiedError(Exception):
         subject,
         hemispheres,
         message=(
-            "Input ECOG hemisphere is not specified in `settings.py` for"
-            " given subject."
+            "Input ECOG hemisphere is not specified in"
+            " `filefinder_settings.py` for given subject."
         ),
     ) -> None:
         self.subject = subject
@@ -210,6 +210,6 @@ class HemisphereNotSpecifiedError(Exception):
 
     def __str__(self):
         return (
-            f"{self.message} Specified hemispheres: {self.hemispheres}."
-            f"Unspecified subject: {self.subject}."
+            f"{self.message} Unspecified subject: {self.subject}."
+            f" Specified hemispheres: {self.hemispheres}."
         )
