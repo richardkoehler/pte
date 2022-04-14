@@ -19,15 +19,13 @@ def pick_by_nm_channels(
     basename = str(Path(fname).stem)
     fpath = Path(nm_channels_dir) / Path(basename + "_nm_channels.csv")
     nm_channels: pd.DataFrame = pd.read_csv(fpath, header=0)
-    channel_picks = nm_channels[
-        (nm_channels["used"] == 1) & (nm_channels["status"] == "good")
-    ]
+    channel_picks = nm_channels[(nm_channels["used"] == 1)]
     if len(channel_picks) == 0:
         raise ValueError(
             "No valid channels found in given nm_channels.csv file:"
             f" {fpath.name}"
         )
-    return raw.pick_channels(ch_names=channel_picks["name"].to_list())
+    return raw.pick_channels(ch_names=channel_picks["new_name"].to_list())
 
 
 def references_from_nm_channels(
@@ -120,6 +118,9 @@ def preprocess(
 
     raw = raw.set_eeg_reference(
         ref_channels="average", ch_type="ecog", verbose=False
+    )
+    raw = raw.rename_channels(
+        {ch: f"{ch}-avgref" for ch in raw.ch_names if "ECOG" in ch}
     )
     anodes, cathodes, ch_names = references_from_nm_channels(
         nm_channels_dir=nm_channels_dir, fname=fname
