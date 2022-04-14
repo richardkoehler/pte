@@ -111,7 +111,7 @@ def add_squared_channel(
 
 
 def _summation_channel_name(summation_channels: list[str]) -> str:
-    """Create channel name from given channels."""
+    """Create channel name for summation montage from given channels."""
     base_items = None
     channel_numbers = []
     for ch_name in summation_channels:
@@ -123,6 +123,25 @@ def _summation_channel_name(summation_channels: list[str]) -> str:
     base_items.insert(2, channel_number)
     summation_channel = "_".join(base_items)
     return summation_channel
+
+
+def _bipolar_channel_name(channels: list[str]) -> str:
+    """Create channel name for bipolar montage from two given channels."""
+    if len(channels) != 2:
+        raise ValueError(
+            "Length of `channels` must be 2. Got:" f"{len(channels)}."
+        )
+    base_items = None
+    channel_numbers = []
+    for ch_name in channels:
+        items = ch_name.split("_")
+        channel_numbers.append(items.pop(2))
+        if not base_items:
+            base_items = items
+    channel_number = f"{'-'.join(channel_numbers)}"
+    base_items.insert(2, channel_number)
+    new_channel = "_".join(base_items)
+    return new_channel
 
 
 def add_summation_channel(
