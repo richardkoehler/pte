@@ -1,7 +1,6 @@
 """Module for handling datasets in BIDS-format."""
 
 from collections import defaultdict
-import os
 import shutil
 from pathlib import Path
 from typing import Optional, Union
@@ -13,6 +12,8 @@ import numpy as np
 import pandas as pd
 import pybv
 from mne_bids.path import get_bids_path_from_fname
+
+import pte.preprocessing.channels
 
 
 def add_coord_column(
@@ -34,22 +35,25 @@ def add_coord_column(
     df_chs : pd.DataFrame
         New DataFrame with appended column.
     """
+    if new_ch == "auto_summation":
+        new_ch = pte.preprocessing.channels._summation_channel_name(ch_names)
+    elif new_ch == "auto_bipolar":
+        new_ch = pte.preprocessing.channels._bipolar_channel_name(ch_names)
     coords = [
         df_chs.loc[ch_name][["x", "y", "z"]].values for ch_name in ch_names
     ]
     coords = np.array(coords, float).mean(axis=0).round(5)
-    append = df_chs.loc[ch_names[0]].copy()
-    append.loc[["x", "y", "z"]] = coords
-    append.name = new_ch
-    df_chs = df_chs.append(append, ignore_index=False)
+    df_chs.loc[new_ch] = df_chs.loc[ch_names[0]]
+    df_chs.loc[new_ch, "size"] = None
+    df_chs.loc[new_ch, ["x", "y", "z"]] = coords
     df_chs.sort_index(axis=0, inplace=True)
     return df_chs
 
 
-def save_bids_file(
+def overwrite_bids_file(
     raw: mne.io.Raw, bids_path: mne_bids.BIDSPath
-) -> mne.io.Raw:
-    """Write preloaded data to BrainVision file in BIDS format.
+) -> mne.io.BaseRaw:
+    """Overwrite BIDS file in BrainVision format with given Raw instance.
 
     Parameters
     ----------
@@ -57,20 +61,17 @@ def save_bids_file(
         The raw MNE object for this function to write
     bids_path : BIDSPath MNE-BIDS object
         The MNE BIDSPath to the file to be overwritten
-    return_raw : boolean, optional
-        Set to True to return the new raw object that has been written.
-        Default is False.
     Returns
     -------
     raw : raw MNE object or None
         The newly written raw object.
     """
-
     data = raw.get_data()
     sfreq = raw.info["sfreq"]
     ch_names = raw.ch_names
-    folder = bids_path.directory
-    # events, event_id = mne.events_from_annotations(raw)
+    tmpdir = bids_path.directory / "tmpdir"
+    fname_base = "tmpfile"
+    source_path = Path(tmpdir, fname_base + ".vhdr")
 
     # rewrite datafile
     pybv.write_brainvision(
@@ -78,10 +79,10 @@ def save_bids_file(
         sfreq=sfreq,
         ch_names=ch_names,
         events=None,
-        fname_base="dummy",
-        folder_out=folder,
+        fname_base=fname_base,
+        folder_out=tmpdir,
     )
-    source_path = os.path.join(folder, "dummy" + ".vhdr")
+
     raw = mne.io.read_raw_brainvision(source_path)
     raw.info["line_freq"] = 50
 
@@ -89,14 +90,12 @@ def save_bids_file(
     raw.set_channel_types(mapping_dict)
 
     mne_bids.write_raw_bids(raw, bids_path, overwrite=True)
-    suffixes = [".eeg", ".vhdr", ".vmrk"]
-    dummy_files = [
-        os.path.join(folder, "dummy" + suffix) for suffix in suffixes
-    ]
-    for dummy_file in dummy_files:
-        os.remove(dummy_file)
+
     # check for success
     raw = mne_bids.read_raw_bids(bids_path, verbose=False)
+
+    shutil.rmtree(tmpdir)
+
     return raw
 
 
