@@ -36,9 +36,9 @@ def add_coord_column(
         New DataFrame with appended column.
     """
     if new_ch == "auto_summation":
-        new_ch = pte.preprocessing.channels._summation_channel_name(ch_names)
+        new_ch = pte.preprocessing.channels.summation_channel_name(ch_names)
     elif new_ch == "auto_bipolar":
-        new_ch = pte.preprocessing.channels._bipolar_channel_name(ch_names)
+        new_ch = pte.preprocessing.channels.bipolar_channel_name(ch_names)
     coords = [
         df_chs.loc[ch_name][["x", "y", "z"]].values for ch_name in ch_names
     ]
@@ -175,7 +175,7 @@ def rewrite_bids_file(
 
         mne_bids.write_raw_bids(
             raw,
-            temp_path,
+            bids_path=temp_path,
             allow_preload=True,
             format="BrainVision",
             verbose=False,
@@ -314,7 +314,15 @@ def _rewrite_channels(
     channels_old = data_old.index.tolist()
     channels_new = raw.ch_names
 
+    channels_to_remove = [ch for ch in channels_old if ch not in raw.ch_names]
+
     channels_to_add = [ch for ch in channels_new if ch not in channels_old]
+
+    if not any((channels_to_add, channels_to_remove)):
+        return
+
+    if channels_to_remove:
+        data_old = data_old.drop(channels_to_remove)
 
     if channels_to_add:
         add_list = []
@@ -337,21 +345,14 @@ def _rewrite_channels(
         data_to_add = pd.DataFrame(add_list, index=index)
         data_old = data_old.append(data_to_add, ignore_index=False)
 
-        channels_to_remove = [
-            ch for ch in channels_old if ch not in raw.ch_names
-        ]
-        if channels_to_remove:
-            data_old = data_old.drop(channels_to_remove)
-
-        data_old = data_old.reindex(index=channels_new)
-
-        data_old.to_csv(
-            channels_path.fpath,
-            sep="\t",
-            na_rep="n/a",
-            index=True,
-            index_label="name",
-        )
+    data_old = data_old.reindex(index=channels_new)
+    data_old.to_csv(
+        channels_path.fpath,
+        sep="\t",
+        na_rep="n/a",
+        index=True,
+        index_label="name",
+    )
 
 
 def _rewrite_electrodes(file: Union[str, Path], raw: mne.io.BaseRaw) -> None:
