@@ -525,12 +525,11 @@ def power_from_bids(
         freqs = np.arange(1, 200, 1)
     else:
         freqs = kwargs_power.pop("freqs")
-        
     power = morlet_from_epochs(
-            epochs=epochs,
-            freqs=freqs,
-            **kwargs_power,
-        )
+        epochs=epochs,
+        freqs=freqs,
+        **kwargs_power,
+    )
 
     if out_dir:
         fname = Path(out_dir) / (str(bids_path.fpath.stem) + "_tfr.h5")

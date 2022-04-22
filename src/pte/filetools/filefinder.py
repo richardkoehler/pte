@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import mne_bids
 
@@ -42,7 +42,7 @@ class DefaultFinder(FileFinder):
     def find_files(
         self,
         directory: Union[Path, str],
-        extensions: Optional[Union[list[str], str]] = None,
+        extensions: Optional[Union[Sequence, str]] = None,
         keywords: Optional[Union[list[str], str]] = None,
         hemisphere: Optional[str] = None,
         stimulation: Optional[str] = None,
@@ -103,7 +103,7 @@ class BIDSFinder(FileFinder):
     def find_files(
         self,
         directory: str,
-        extensions: Optional[list] = [".vhdr", ".edf"],
+        extensions: Optional[Union[Sequence, str]] = (".vhdr", ".edf"),
         keywords: Optional[list] = None,
         hemisphere: Optional[str] = None,
         stimulation: Optional[str] = None,
