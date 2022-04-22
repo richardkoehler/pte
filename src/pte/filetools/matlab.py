@@ -36,7 +36,7 @@ def _check_keys(data: dict) -> dict:
     return data
 
 
-def _todict(matobj: scipy.io.matlab.mio5_params.mat_struct) -> dict:
+def _todict(matobj: scipy.io.matlab.mat_struct) -> dict:
     """
     Construct nested dictionary from matobject.
 
