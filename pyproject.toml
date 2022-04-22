@@ -21,8 +21,7 @@ maintainers = [
 ]
 name = "pte"
 readme = "README.md"
-requires-python = ">=3.9"
-version = "0.1.0.dev1"
+requires-python = ">=3.10"
 
 dependencies = [
   "joblib",
