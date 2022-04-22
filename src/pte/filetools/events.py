@@ -4,23 +4,21 @@ from pathlib import Path
 from typing import Optional, Union
 
 import mne_bids
-import numpy as np
 import pandas as pd
 
 
-def get_bad_events(
-    bad_events_path: Optional[Union[Path, mne_bids.BIDSPath, str]],
-    fname: Union[Path, str],
-) -> np.ndarray:
-    """Get DataFrame of bad events from bad events path."""
-    if not bad_events_path:
-        return np.atleast_1d([])
-    bad_events_path = Path(bad_events_path)
-    if bad_events_path.is_dir():
-        basename = Path(fname).stem
-        bad_events_path = bad_events_path / (basename + "_bad_epochs.csv")
-    if not bad_events_path.exists():
-        print(f"No bad epochs file found for: {str(fname)}")
-        return np.atleast_1d([])
-    bad_events = pd.read_csv(bad_events_path, index_col=0).event_id.to_numpy()
-    return bad_events
+def get_bad_epochs(
+    filename: Union[Path, str, mne_bids.BIDSPath],
+    bad_epochs_dir: Optional[Union[Path, str]] = None,
+) -> pd.DataFrame:
+    """Get DataFrame of bad epochs from *_badepochs file."""
+    if bad_epochs_dir is not None:
+        if isinstance(filename, mne_bids.BIDSPath):
+            basename = (
+                filename.copy().update(suffix=None, datatype=None).basename
+            )
+        else:
+            basename = Path(filename).stem[:-5]
+        filename = Path(bad_epochs_dir, f"{basename}_badepochs.csv")
+    bad_epochs = pd.read_csv(filename, index_col=0)
+    return bad_epochs
