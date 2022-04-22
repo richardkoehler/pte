@@ -9,6 +9,32 @@ import mne_bids
 from pte.filetools.filefinder_abc import DirectoryNotFoundError, FileFinder
 
 
+def get_filefinder(
+    datatype: str, hemispheres: Optional[dict] = None, **kwargs
+) -> FileFinder:
+    """Create and return FileFinder of desired type.
+
+    Parameters
+    ----------
+    datatype : str
+        Allowed values for `datatype`: ["any", "bids"].
+
+    Returns
+    -------
+    FileFinder
+        Instance of FileFinder for reading given `datatype`.
+    """
+    finders = {
+        "any": DefaultFinder,
+        "bids": BIDSFinder,
+    }
+    datatype = datatype.lower()
+    if datatype not in finders:
+        raise FinderNotFoundError(datatype, finders)
+
+    return finders[datatype](hemispheres=hemispheres, **kwargs)
+
+
 @dataclass
 class DefaultFinder(FileFinder):
     """Class for finding and handling any type of file."""
@@ -77,7 +103,7 @@ class BIDSFinder(FileFinder):
     def find_files(
         self,
         directory: str,
-        extensions: Optional[list] = None,
+        extensions: Optional[list] = [".vhdr", ".edf"],
         keywords: Optional[list] = None,
         hemisphere: Optional[str] = None,
         stimulation: Optional[str] = None,
@@ -151,30 +177,6 @@ class BIDSFinder(FileFinder):
             else:
                 bids_paths.append(bids_path)
         return bids_paths
-
-
-def get_filefinder(datatype: str, **kwargs) -> FileFinder:
-    """Create and return FileFinder of desired type.
-
-    Parameters
-    ----------
-    datatype : str
-        Allowed values for `datatype`: ["any", "bids"].
-
-    Returns
-    -------
-    FileFinder
-        Instance of FileFinder for reading given `datatype`.
-    """
-    finders = {
-        "any": DefaultFinder,
-        "bids": BIDSFinder,
-    }
-    datatype = datatype.lower()
-    if datatype not in finders:
-        raise FinderNotFoundError(datatype, finders)
-
-    return finders[datatype](**kwargs)
 
 
 class FinderNotFoundError(Exception):
