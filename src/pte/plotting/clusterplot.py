@@ -1,0 +1,101 @@
+"""Module for plotting clusters."""
+from pathlib import Path
+
+from matplotlib import pyplot as plt
+import matplotlib.figure
+import numpy as np
+import pte_stats
+
+
+def clusterplot_combined(
+    power_a: np.ndarray,
+    power_b: np.ndarray | int | float,
+    extent: tuple | list,
+    alpha: float = 0.05,
+    n_perm: int = 100,
+    title: str | None = None,
+    borderval_cbar: str | int | float = "auto",
+    out_path: Path | str | None = None,
+    show_plot: bool = True,
+    n_jobs: int = 1,
+) -> matplotlib.figure.Figure:
+    """Plot power, p-values and significant clusters."""
+
+    if isinstance(power_b, (int, float)):
+        power_av = power_a.mean(axis=0)
+    else:
+        power_av = power_a.mean(axis=0) - power_b.mean(axis=0)
+
+    if isinstance(borderval_cbar, str):
+        if borderval_cbar != "auto":
+            raise ValueError(
+                "`border_val` must be either an int, float or"
+                f" 'auto'. Got: {borderval_cbar}."
+            )
+        borderval_cbar = min(power_av.max(), np.abs(power_av.min()))
+
+    fig, axs = plt.subplots(
+        nrows=3, ncols=1, figsize=(3, 6), sharex=True, sharey=True
+    )
+    # Plot averaged power
+    pos_0 = axs[0].imshow(
+        power_av,
+        extent=extent,
+        cmap="viridis",
+        aspect="auto",
+        origin="lower",
+        vmin=borderval_cbar * -1,
+        vmax=borderval_cbar,
+    )
+    fig.colorbar(
+        pos_0,
+        ax=axs[0],
+        label="Power (Norm.)",
+    )
+
+    # Plot p-values
+    p_values = pte_stats.permutation_2d(
+        data_a=power_a,
+        data_b=power_b,
+        n_perm=n_perm,
+        two_tailed=True,
+    )
+    pos_1 = axs[1].imshow(
+        p_values,
+        extent=extent,
+        cmap="viridis_r",
+        aspect="auto",
+        origin="lower",
+    )
+    fig.colorbar(pos_1, ax=axs[1], label="p-values")
+
+    # Plot significant clusters
+    _, cluster_arr = pte_stats.cluster_analysis_2d(
+        data_a=power_a,
+        data_b=power_b,
+        alpha=alpha,
+        n_perm=n_perm,
+        only_max_cluster=False,
+        n_jobs=n_jobs,
+    )
+    squared = np.zeros(power_a.shape[1:])
+    if cluster_arr:
+        for cluster in cluster_arr:
+            squared[cluster] = 1
+    np.expand_dims(squared, axis=0)
+
+    pos_2 = axs[2].imshow(
+        squared,
+        extent=extent,
+        cmap="binary",
+        aspect="auto",
+        origin="lower",
+    )
+    fig.colorbar(pos_2, ax=axs[2], label=f"Signif. Clusters (p ≤ {alpha})")
+    fig.suptitle(title)
+    plt.tight_layout()
+    if out_path:
+        fig.savefig(out_path, bbox_inches="tight", dpi=300)
+    if show_plot:
+        plt.show()
+    return fig

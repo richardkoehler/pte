@@ -89,11 +89,10 @@ def add_squared_channel(
         The Raw object containing the added squared channel.
     """
     events, event_id = mne.events_from_annotations(raw, event_id)
-    data = raw.get_data()
     events_ids = events[:, 0]
-    data_squared = np.zeros((1, data.shape[1]))
+    data_squared = np.zeros((1, raw.n_times))
     for i in np.arange(0, len(events_ids), 2):
-        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1
+        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0
 
     info = mne.create_info(
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]
@@ -110,8 +109,8 @@ def add_squared_channel(
     return raw
 
 
-def _summation_channel_name(summation_channels: list[str]) -> str:
-    """Create channel name from given channels."""
+def summation_channel_name(summation_channels: list[str]) -> str:
+    """Create channel name for summation montage from given channels."""
     base_items = None
     channel_numbers = []
     for ch_name in summation_channels:
@@ -125,11 +124,31 @@ def _summation_channel_name(summation_channels: list[str]) -> str:
     return summation_channel
 
 
+def bipolar_channel_name(channels: list[str]) -> str:
+    """Create channel name for bipolar montage from two given channels."""
+    if len(channels) != 2:
+        raise ValueError(
+            "Length of `channels` must be 2. Got:" f"{len(channels)}."
+        )
+    base_items = None
+    channel_numbers = []
+    for ch_name in channels:
+        items = ch_name.split("_")
+        channel_numbers.append(items.pop(2))
+        if not base_items:
+            base_items = items
+    channel_number = f"{'-'.join(channel_numbers)}"
+    base_items.insert(2, channel_number)
+    new_channel = "_".join(base_items)
+    return new_channel
+
+
 def add_summation_channel(
     raw: mne.io.BaseRaw,
     summation_channels: list[str],
     new_channel_name: str = "auto",
     inplace: bool = False,
+    scale_data_by_factor: Optional[Union[int, float]] = None,
 ) -> mne.io.BaseRaw:
     """Sum up signals from given channels and add to MNE Raw object.
 
@@ -150,9 +169,11 @@ def add_summation_channel(
         The Raw object containing the added squared channel.
     """
     if new_channel_name == "auto":
-        new_channel_name = _summation_channel_name(summation_channels)
+        new_channel_name = summation_channel_name(summation_channels)
     data = raw.get_data(picks=summation_channels)
     new_data = np.expand_dims(data.sum(axis=0), axis=0)
+    if scale_data_by_factor is not None:
+        new_data *= scale_data_by_factor
     ch_type = raw.get_channel_types(picks=summation_channels[0])
     info = mne.create_info(
         ch_names=[new_channel_name],

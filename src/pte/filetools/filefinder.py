@@ -2,11 +2,37 @@
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Sequence, Union
 
 import mne_bids
 
 from pte.filetools.filefinder_abc import DirectoryNotFoundError, FileFinder
+
+
+def get_filefinder(
+    datatype: str, hemispheres: Optional[dict] = None, **kwargs
+) -> FileFinder:
+    """Create and return FileFinder of desired type.
+
+    Parameters
+    ----------
+    datatype : str
+        Allowed values for `datatype`: ["any", "bids"].
+
+    Returns
+    -------
+    FileFinder
+        Instance of FileFinder for reading given `datatype`.
+    """
+    finders = {
+        "any": DefaultFinder,
+        "bids": BIDSFinder,
+    }
+    datatype = datatype.lower()
+    if datatype not in finders:
+        raise FinderNotFoundError(datatype, finders)
+
+    return finders[datatype](hemispheres=hemispheres, **kwargs)
 
 
 @dataclass
@@ -16,8 +42,12 @@ class DefaultFinder(FileFinder):
     def find_files(
         self,
         directory: Union[Path, str],
+        extensions: Optional[Union[Sequence, str]] = None,
         keywords: Optional[Union[list[str], str]] = None,
-        extensions: Optional[Union[list[str], str]] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[str] = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -32,17 +62,24 @@ class DefaultFinder(FileFinder):
         self.directory = Path(directory)
         if not self.directory.is_dir():
             raise DirectoryNotFoundError(self.directory)
-        self.files = self._find_files(self.directory, keywords, extensions)
+        self._find_files(self.directory, extensions)
+        self._filter_files(
+            keywords=keywords,
+            hemisphere=hemisphere,
+            stimulation=stimulation,
+            medication=medication,
+            exclude=exclude,
+        )
         if verbose:
             print(self)
 
     def filter_files(
         self,
-        keywords: list = None,
-        hemisphere: str = None,
-        stimulation: str = None,
-        medication: str = None,
-        exclude: str = None,
+        keywords: Optional[list] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[str] = None,
         verbose: bool = False,
     ) -> None:
         """Filter filepaths for given parameters and return filtered list."""
@@ -66,8 +103,12 @@ class BIDSFinder(FileFinder):
     def find_files(
         self,
         directory: str,
-        keywords: list = None,
-        extensions: list = None,
+        extensions: Optional[Union[Sequence, str]] = (".vhdr", ".edf"),
+        keywords: Optional[list] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[str] = None,
         verbose: bool = False,
     ):
         """Find files in directory with optional keywords and extensions.
@@ -81,16 +122,25 @@ class BIDSFinder(FileFinder):
             verbose (bool): verbosity level (optional, default=True)
         """
         self.directory = directory
-        files = self._find_files(self.directory, keywords, extensions)
-        self.files = self._make_bids_paths(files)
+        self._find_files(self.directory, extensions)
+        self._filter_files(
+            keywords=keywords,
+            hemisphere=hemisphere,
+            stimulation=stimulation,
+            medication=medication,
+            exclude=exclude,
+        )
+        self.files = self._make_bids_paths(self.files)
+        if verbose:
+            print(self)
 
     def filter_files(
         self,
-        keywords: list = None,
-        hemisphere: str = None,
-        stimulation: str = None,
-        medication: str = None,
-        exclude: str = None,
+        keywords: Optional[list] = None,
+        hemisphere: Optional[str] = None,
+        stimulation: Optional[str] = None,
+        medication: Optional[str] = None,
+        exclude: Optional[str] = None,
         verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
@@ -127,29 +177,6 @@ class BIDSFinder(FileFinder):
             else:
                 bids_paths.append(bids_path)
         return bids_paths
-
-
-def get_filefinder(datatype: str) -> FileFinder:
-    """Create and return FileFinder of desired type.
-
-    Parameters
-    ----------
-    datatype : str
-        Allowed values for `datatype`: ["any", "bids"].
-
-    Returns
-    -------
-    FileFinder
-        Instance of FileFinder for reading given `datatype`.
-    """
-    finders = {
-        "any": DefaultFinder,
-        "bids": BIDSFinder,
-    }
-    datatype = datatype.lower()
-    if datatype in finders:
-        return finders[datatype]()
-    raise FinderNotFoundError(datatype, finders)
 
 
 class FinderNotFoundError(Exception):

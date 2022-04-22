@@ -7,47 +7,9 @@ import mne
 import mne_bids
 import numpy as np
 from matplotlib import pyplot as plt
+import scipy.ndimage
 
 import pte
-
-
-def plot_power_diff(
-    power_0: mne.time_frequency.AverageTFR,
-    power_1: mne.time_frequency.AverageTFR,
-    title: Optional[str] = None,
-    fname: Optional[Union[str, Path]] = None,
-    show: bool = True,
-    kwargs_plot: Optional[dict] = None,
-) -> matplotlib.figure.Figure:
-    """Plot difference of two MNE AverageTFR objects."""
-    power = power_0 - power_1
-    fig, axes = plt.subplots(
-        nrows=1,
-        ncols=1,
-        figsize=(4.75, 3.75),
-        tight_layout=True,
-    )
-    if not kwargs_plot:
-        kwargs_plot = {}
-    kwargs_plot.update(
-        picks="all",
-        cmap="viridis",
-        title=title,
-        show=show,
-        axes=axes,
-        verbose=False,
-    )
-    fig = power.plot(
-        **kwargs_plot,
-    )[0]
-    if show:
-        plt.show(block=True)
-    fig.savefig(
-        fname=fname,
-        dpi=300,
-        bbox_inches="tight",
-    )
-    return fig
 
 
 def plot_power(
@@ -55,7 +17,7 @@ def plot_power(
     title: Optional[str] = None,
     fname: Optional[Union[str, Path]] = None,
     show: bool = True,
-    kwargs_plot: Optional[dict] = None,
+    **kwargs_plot,
 ) -> matplotlib.figure.Figure:
     """Plot single MNE AverageTFR object."""
     fig, axes = plt.subplots(
@@ -64,17 +26,13 @@ def plot_power(
         figsize=(4.75, 3.75),
         tight_layout=True,
     )
-    if not kwargs_plot:
-        kwargs_plot = {}
-    kwargs_plot.update(
+    fig = power.plot(
         picks="all",
         cmap="viridis",
         title=title,
         axes=axes,
         show=show,
         verbose=False,
-    )
-    fig = power.plot(
         **kwargs_plot,
     )[0]
     if show:
@@ -86,6 +44,49 @@ def plot_power(
             bbox_inches="tight",
         )
     return fig
+
+
+def smooth_power(
+    power: mne.time_frequency.AverageTFR,
+    smoothing_type: str = "gaussian",
+    **kwargs,
+) -> mne.time_frequency.AverageTFR:
+    """Smooth data in AverageTFR object using scipy smoothing filters."""
+    power = power.copy()
+    for i, data in enumerate(power.data):
+        power.data[i] = smooth_2d_array(
+            data=data,
+            smoothing_type=smoothing_type,
+            **kwargs,
+        )
+    return power
+
+
+def smooth_2d_array(
+    data: np.ndarray,
+    smoothing_type: str = "gaussian",
+    **kwargs,
+) -> np.ndarray:
+    """Smooth 2D data using scipy smoothing filters."""
+    if smoothing_type == "gaussian":
+        if "sigma" not in kwargs:
+            kwargs["sigma"] = 5
+        data_out = scipy.ndimage.gaussian_filter(
+            input=data, mode="reflect", **kwargs
+        )
+    elif smoothing_type == "median":
+        if "size" not in kwargs:
+            kwargs["size"] = 5
+        data_out = scipy.ndimage.median_filter(
+            input=data,
+            mode="reflect",
+            **kwargs,
+        )
+    else:
+        raise ValueError(
+            "Not a valid ``smoothing_type``. Got:" f" {smoothing_type}."
+        )
+    return data_out
 
 
 def apply_baseline(
@@ -456,12 +457,12 @@ def discard_epochs(
 
 
 def power_from_bids(
-    file: mne_bids.BIDSPath,
+    bids_path: mne_bids.BIDSPath,
     nm_channels_dir: Path,
     events_trial_onset: Optional[list[str]] = None,
     events_trial_end: Optional[list[str]] = None,
     min_distance_trials: Union[int, float] = 0,
-    bad_events_dir: Optional[Union[Path, str]] = None,
+    bad_epochs_dir: Optional[Union[Path, str]] = None,
     out_dir: Optional[Union[Path, str]] = None,
     kwargs_preprocess: Optional[dict] = None,
     kwargs_epochs: Optional[dict] = None,
@@ -470,109 +471,67 @@ def power_from_bids(
     Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]
 ]:
     """Calculate power from single file."""
-    print(f"File: {file.basename}")
-    raw = mne_bids.read_raw_bids(file, verbose=False)
+    print(f"File: {bids_path.basename}")
+    raw = mne_bids.read_raw_bids(bids_path, verbose=False)
 
     try:
-        if kwargs_preprocess:
-            raw = pte.preprocessing.preprocess(
-                raw=raw,
-                nm_channels_dir=nm_channels_dir,
-                pick_used_channels=True,
-                **kwargs_preprocess,
-            )
-        else:
-            raw = pte.preprocessing.preprocess(
-                raw=raw,
-                pick_used_channels=True,
-                nm_channels_dir=nm_channels_dir,
-            )
+        if kwargs_preprocess is None:
+            kwargs_preprocess = {}
+        raw = pte.preprocessing.preprocess(
+            raw=raw,
+            nm_channels_dir=nm_channels_dir,
+            filename=bids_path,
+            pick_used_channels=True,
+            **kwargs_preprocess,
+        )
     except ValueError as error:
         if "No valid channels found" not in str(error):
             raise
         print(error)
         return None
 
-    if kwargs_epochs:
-        epochs = epochs_from_raw(
-            raw=raw,
-            events_trial_onset=events_trial_onset,
-            events_trial_end=events_trial_end,
-            min_distance_trials=min_distance_trials,
-            **kwargs_epochs,
-        )
-    else:
-        epochs = epochs_from_raw(
-            raw=raw,
-            events_trial_onset=events_trial_onset,
-            events_trial_end=events_trial_end,
-            min_distance_trials=min_distance_trials,
-        )
+    if kwargs_epochs is None:
+        kwargs_epochs = {}
+    epochs = epochs_from_raw(
+        raw=raw,
+        events_trial_onset=events_trial_onset,
+        events_trial_end=events_trial_end,
+        min_distance_trials=min_distance_trials,
+        **kwargs_epochs,
+    )
 
-    if bad_events_dir:
-        bad_events = pte.filetools.get_bad_events(
-            bad_events_path=bad_events_dir,
-            fname=file.fpath,
-        )
-        if bad_events is not None:
-            bad_indices = np.array(
-                [
-                    idx
-                    for idx, event in enumerate(epochs.selection)
-                    if event in bad_events
-                ]
+    if bad_epochs_dir is not None:
+        try:
+            bad_epochs_df = pte.filetools.get_bad_epochs(
+                filename=bids_path,
+                bad_epochs_dir=bad_epochs_dir,
             )
-            epochs = epochs.drop(indices=bad_indices)
+            if bad_epochs_df is not None:
+                bad_epochs = bad_epochs_df.event_id.to_numpy()
+                bad_indices = np.array(
+                    [
+                        idx
+                        for idx, event in enumerate(epochs.selection)
+                        if event in bad_epochs
+                    ]
+                )
+                epochs = epochs.drop(indices=bad_indices)
+        except FileNotFoundError as e:
+            print(e, "\nNot gathering bad epochs for the current file.")
 
-    if not kwargs_power or "freqs" not in kwargs_power:
+    if kwargs_power is None:
+        kwargs_power = {}
+    if "freqs" not in kwargs_power:
         freqs = np.arange(1, 200, 1)
     else:
         freqs = kwargs_power.pop("freqs")
-    if kwargs_power:
-        power = morlet_from_epochs(
-            epochs=epochs,
-            freqs=freqs,
-            **kwargs_power,
-        )
-    else:
-        power = morlet_from_epochs(
-            epochs=epochs,
-            freqs=freqs,
-        )
+    power = morlet_from_epochs(
+        epochs=epochs,
+        freqs=freqs,
+        **kwargs_power,
+    )
 
     if out_dir:
-        fname = Path(out_dir) / (str(file.fpath.stem) + "_tfr.h5")
+        fname = Path(out_dir) / (str(bids_path.fpath.stem) + "_tfr.h5")
         power.save(fname=fname, verbose=True)
     return power
-
-
-def power_from_files(
-    filenames: list[mne_bids.BIDSPath],
-    nm_channels_dir,
-    events_trial_onset: Optional[list[str]],
-    out_dir: Optional[Union[Path, str]] = None,
-    bad_events_dir: Optional[Union[Path, str]] = None,
-    min_distance_trials: Union[int, float] = 0,
-    kwargs_preprocess: Optional[dict] = None,
-    kwargs_epochs: Optional[dict] = None,
-    kwargs_power: Optional[dict] = None,
-    **kwargs,
-) -> list[Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]]:
-    """Perform Morlet transform on batch of given BIDS files."""
-    if not filenames:
-        raise ValueError("No filenames given.")
-    return [
-        power_from_bids(
-            file=file,
-            nm_channels_dir=nm_channels_dir,
-            events_trial_onset=events_trial_onset,
-            out_dir=out_dir,
-            bad_events_dir=bad_events_dir,
-            min_distance_trials=min_distance_trials,
-            kwargs_preprocess=kwargs_preprocess,
-            kwargs_epochs=kwargs_epochs,
-            kwargs_power=kwargs_power,
-            **kwargs,
-        )
-        for file in filenames
-    ]

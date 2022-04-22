@@ -14,6 +14,7 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 description = "PTE is an open-source software package for working with electrophysiological data"
+dynamic = ["version"]
 keywords = ["eeg", "ieeg", "dbs", "ecog", "lfp"]
 license = {file = "LICENSE.txt"}
 maintainers = [
@@ -21,8 +22,7 @@ maintainers = [
 ]
 name = "pte"
 readme = "README.md"
-requires-python = ">=3.9"
-version = "0.1.0"
+requires-python = ">=3.10"
 
 dependencies = [
   "joblib",
@@ -32,7 +32,6 @@ dependencies = [
   "numba",
   "numpy",
   "pandas",
-  "pip",
   "plotly",
   "pte-stats",
   "scikit-image",
@@ -50,6 +49,7 @@ dev = [
   "pylint",
   "pytest",
   "pytest-cov",
+  "tox",
 ]
 
 [project.urls]

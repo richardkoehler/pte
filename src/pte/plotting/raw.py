@@ -1,20 +1,19 @@
 """Plotting functions based on plotly."""
 
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
 
 import mne
 import numpy as np
 import pandas as pd
 import scipy.signal
-from plotly import express
 
 
 def plotly_mne(
     mne_raw: mne.io.BaseRaw,
     file_name: Union[Path, str],
     time_slice: tuple = (),
-    plot_title: str = None,
+    plot_title: Optional[str] = None,
     decimate: bool = True,
     normalize: bool = True,
     detrend: str = "linear",
@@ -71,7 +70,7 @@ def plotly_rawdata(
     channels_array: np.ndarray,
     sfreq: Union[int, float],
     file_name: Union[str, Path],
-    plot_title: str = None,
+    plot_title: Optional[str] = None,
     decimate: bool = True,
     normalize: bool = True,
     detrend: str = "linear",
@@ -100,7 +99,14 @@ def plotly_rawdata(
         padding: multiplication factor for spacing between signals on the
             y-axis. For highly variant data, use higher values. default is 2.
     """
-
+    try:
+        from plotly import express
+    except ImportError as e:
+        print(
+            "For full plotting functionality, please install the `plotly`"
+            " library."
+        )
+        raise e
     time_array = np.squeeze(time_array)
     signals_array = np.squeeze(signals_array)
     channels_array = np.squeeze(channels_array)
