@@ -102,8 +102,10 @@ def plotly_rawdata(
     try:
         from plotly import express
     except ImportError as e:
-        print("For full plotting functionality, please install the `plotly`"
-        " library.")
+        print(
+            "For full plotting functionality, please install the `plotly`"
+            " library."
+        )
         raise e
     time_array = np.squeeze(time_array)
     signals_array = np.squeeze(signals_array)
