@@ -30,13 +30,20 @@ def pick_by_nm_channels(
 
 def references_from_nm_channels(
     nm_channels_dir: Union[Path, str],
-    fname: Union[Path, str, mne_bids.BIDSPath],
+    filename: Union[Path, str, mne_bids.BIDSPath],
     types: Union[str, list] = "dbs",
 ) -> tuple[list, list, list]:
     """Get referencing montage from *nm_channels.csv file."""
     if not isinstance(types, list):
         types = [types]
-    basename = str(Path(fname).stem)
+    if isinstance(filename, mne_bids.BIDSPath):
+        # Implement this later
+        # basename = filename.copy().update(
+        # extension=None, suffix=None, datatype=None
+        # ).basename
+        basename = filename.copy().update(extension=None).basename
+    else:
+        basename = str(Path(filename).stem)
     fpath = Path(nm_channels_dir) / Path(basename + "_nm_channels.csv")
     nm_channels: pd.DataFrame = pd.read_csv(fpath, header=0)
     anodes, cathodes, ch_names = [], [], []
@@ -93,37 +100,35 @@ def bandstop_filter(
 def preprocess(
     raw: mne.io.BaseRaw,
     nm_channels_dir: Path,
+    filename: Optional[Union[str, Path, mne_bids.BIDSPath]] = None,
     line_freq: Optional[int] = None,
-    fname: Optional[Union[str, Path]] = None,
     resample_freq: Optional[Union[int, float]] = 500,
+    high_pass: Optional[Union[int, float]] = None,
+    low_pass: Optional[Union[int, float]] = None,
     bandstop_freq: Optional[Union[str, int, float, np.ndarray]] = "auto",
     pick_used_channels: bool = False,
 ) -> Optional[mne.io.BaseRaw]:
     """Preprocess data"""
-    if not line_freq:
+    if line_freq is None:
         line_freq = raw.info["line_freq"]
-    if fname is None:
-        fname = raw.filenames[0]
-    elif isinstance(fname, Path):
-        fname = str(fname)
+    if filename is None:
+        filename = raw.filenames[0]
+    if isinstance(filename, Path):
+        filename = str(filename)
 
     raw = raw.pick(picks=["ecog", "dbs"], verbose=False)
     if not raw.preload:
         raw.load_data(verbose=False)
-    raw = raw.resample(sfreq=resample_freq, verbose=False)
-    notch_freqs = np.arange(line_freq, raw.info["sfreq"] / 2, line_freq)
-    raw = raw.notch_filter(notch_freqs, verbose=False)
-
-    raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
 
     raw = raw.set_eeg_reference(
         ref_channels="average", ch_type="ecog", verbose=False
     )
+
     raw = raw.rename_channels(
         {ch: f"{ch}-avgref" for ch in raw.ch_names if "ECOG" in ch}
     )
     anodes, cathodes, ch_names = references_from_nm_channels(
-        nm_channels_dir=nm_channels_dir, fname=fname
+        nm_channels_dir=nm_channels_dir, filename=filename
     )
     if not ch_names:
         print("No channels given for bipolar re-referencing.")
@@ -136,9 +141,18 @@ def preprocess(
             drop_refs=True,
         )
 
+    raw = raw.resample(sfreq=resample_freq, verbose=False)
+
+    raw = raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=False)
+
+    notch_freqs = np.arange(line_freq, raw.info["sfreq"] / 2, line_freq)
+    raw = raw.notch_filter(notch_freqs, verbose=False)
+
+    raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
+
     if pick_used_channels:
         raw = pick_by_nm_channels(
-            raw=raw, nm_channels_dir=nm_channels_dir, fname=fname
+            raw=raw, nm_channels_dir=nm_channels_dir, fname=filename
         )
 
     raw = raw.reorder_channels(sorted(raw.ch_names))
