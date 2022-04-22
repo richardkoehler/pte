@@ -22,5 +22,7 @@ dependencies:
   - black
   - isort
   - mypy
+  - pip-tools
   - pylint
   - pytest
+  - tox
