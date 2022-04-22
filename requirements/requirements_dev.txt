@@ -1,6 +1,6 @@
 joblib
 matplotlib
-mne
+mne[hdf5]
 mne-bids
 numba
 numpy
