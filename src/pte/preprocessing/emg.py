@@ -103,9 +103,7 @@ def get_emg_rms(
     raw_rms.set_meas_date(raw.info["meas_date"])
     raw_rms.info["line_freq"] = raw.info["line_freq"]
     raw_rms.set_annotations(raw.annotations)
-    raw_rms.set_channel_types(
-        {ch: "emg" for ch in raw_rms.ch_names if "EMG" in ch}
-    )
+    raw_rms.set_channel_types({"EMG_BIP": "emg"})
     return raw_rms
 
 

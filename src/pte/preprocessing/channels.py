@@ -59,7 +59,7 @@ def add_emg_rms(
         new_ch_name = "_".join(
             ("EMG", side, "BR", "RMS", str(window_duration))
         )
-    raw._orig_units[rms_channel] = "µV"  # pylint: disable=protected-access
+    raw._orig_units[rms_channel] = "V"  # pylint: disable=protected-access
     raw = raw.rename_channels({rms_channel: new_ch_name})
 
     return raw
@@ -149,6 +149,7 @@ def add_summation_channel(
     new_channel_name: str = "auto",
     inplace: bool = False,
     scale_data_by_factor: Optional[Union[int, float]] = None,
+    sort_channels: bool = True,
 ) -> mne.io.BaseRaw:
     """Sum up signals from given channels and add to MNE Raw object.
 
@@ -162,6 +163,8 @@ def add_summation_channel(
         Channel name of new channel to be added
     inplace : bool. Default: False
         Set to True if Raw object should be modified in place.
+    sort_channels: bool. Default: True
+        Set to False if channel names should not be sorted alphabetically.
 
     Returns
     -------
@@ -189,4 +192,6 @@ def add_summation_channel(
     if not raw.preload:
         raw.load_data()
     raw = raw.add_channels([raw_new], force_update_info=True)
+    if sort_channels:
+        raw.reorder_channels(sorted(raw.ch_names))
     return raw
