@@ -8,7 +8,7 @@ import mne_bids
 import pte
 
 
-def add_emg_rms(
+def process_emg_rms(
     raw_or_file: Union[mne.io.BaseRaw, mne_bids.BIDSPath],
     emg_channels: Union[str, list[str]],
     window_duration: Union[int, float] = 100,
