@@ -197,6 +197,7 @@ def rewrite_bids_file(
         # Check for success
         raw = mne_bids.read_raw_bids(bids_path, verbose=False)
     except Exception as exception:
+        print("Rewriting failed, cleaning up...")
         for file in Path(backup_dir).glob("*"):
             if file.is_file():
                 shutil.copy(file, current_dir)
@@ -296,7 +297,7 @@ def _get_group(channel_name: str) -> str:
         LFP="DBS",
     )
     items = channel_name.split("_")
-    return f"{groups[items[0]]}_{sides[items[1]]}"
+    return f"{groups[items[0]]}_{sides[items[1]]}".strip("_")
 
 
 def _rewrite_channels(
