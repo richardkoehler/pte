@@ -74,11 +74,11 @@ class FileFinder(ABC):
 
     @staticmethod
     def _keyword_search(
-        files: list[str], keywords: Optional[Union[str, list]]
+        files: list[str], keywords: Optional[Union[str, Sequence]]
     ) -> list:
         if not keywords:
             return files
-        if not isinstance(keywords, list):
+        if isinstance(keywords, str):
             keywords = [keywords]
         filtered_files = [
             file for file in files if any(key in file for key in keywords)
@@ -88,7 +88,7 @@ class FileFinder(ABC):
     def _find_files(
         self,
         directory: Union[Path, str],
-        extensions: Optional[Union[list, str]] = None,
+        extensions: Optional[Union[Sequence, str]] = None,
     ) -> None:
         """Find files in directory with optional extensions.
 
