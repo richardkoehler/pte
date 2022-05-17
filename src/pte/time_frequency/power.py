@@ -342,7 +342,7 @@ def morlet_from_epochs(
     **kwargs,
 ) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
     """Calculate power with MNE's Morlet transform and sensible defaults."""
-    if freqs is None:
+    if freqs == "auto":
         upper_freq = min(epochs.info["sfreq"] / 2, 200.0)
         freqs = np.arange(1.0, upper_freq)
 
