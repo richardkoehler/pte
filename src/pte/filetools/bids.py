@@ -16,6 +16,26 @@ from mne_bids.path import get_bids_path_from_fname
 import pte.preprocessing.channels
 
 
+def sub_med_stim_from_fname(
+    fname: Path | str | mne_bids.BIDSPath,
+) -> tuple[str, str, str]:
+    entities = mne_bids.get_entities_from_fname(fname)
+    sub = entities["subject"]
+    if "On" in entities["session"]:
+        med = "ON"
+    elif "Off" in entities["session"]:
+        med = "OFF"
+    else:
+        med = "n/a"
+    if "On" in entities["acquisition"]:
+        stim = "ON"
+    elif "Off" in entities["acquisition"]:
+        stim = "OFF"
+    else:
+        stim = "n/a"
+    return sub, med, stim
+
+
 def add_coord_column(
     df_chs: pd.DataFrame, ch_names: list[str], new_ch: str
 ) -> pd.DataFrame:
@@ -153,7 +173,7 @@ def rewrite_bids_file(
         The newly written raw object.
     """
     current_path = bids_path.copy().update(
-        suffix=bids_path.datatype, extension=None
+        suffix=bids_path.datatype, extension=".vhdr"
     )
     current_dir = current_path.directory
 
@@ -211,7 +231,7 @@ def rewrite_bids_file(
 
 def _backup_files(current_path: mne_bids.BIDSPath, backup_dir: Path) -> None:
     """Create backup of BIDS files."""
-    backup_dir.mkdir(exist_ok=True)
+    backup_dir.mkdir(exist_ok=True, parents=True)
     try:
         backup_path = (backup_dir / current_path.basename).with_suffix(".vhdr")
         mne_bids.copyfiles.copyfile_brainvision(

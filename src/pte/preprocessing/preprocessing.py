@@ -1,7 +1,7 @@
 """Module with preprocessing functions (resampling, referencing, etc.)"""
 
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, Sequence
 
 import mne
 import mne_bids
@@ -28,13 +28,13 @@ def pick_by_nm_channels(
     return raw.pick_channels(ch_names=channel_picks["new_name"].to_list())
 
 
-def references_from_nm_channels(
-    nm_channels_dir: Union[Path, str],
-    filename: Union[Path, str, mne_bids.BIDSPath],
-    types: Union[str, list] = "dbs",
+def bipolar_refs_from_nm_channels(
+    nm_channels_dir: Path | str,
+    filename: Path | str | mne_bids.BIDSPath,
+    types: str | Sequence = ("ecog", "dbs", "eeg"),
 ) -> tuple[list, list, list]:
     """Get referencing montage from *nm_channels.csv file."""
-    if not isinstance(types, list):
+    if not isinstance(types, Sequence):
         types = [types]
     if isinstance(filename, mne_bids.BIDSPath):
         # Implement this later
@@ -49,7 +49,9 @@ def references_from_nm_channels(
     anodes, cathodes, ch_names = [], [], []
     for ch_type in types:
         df_picks = nm_channels.loc[
-            (nm_channels.type == ch_type) & (nm_channels.used == 1)
+            (nm_channels.type == ch_type)
+            & (nm_channels.used == 1)
+            & (nm_channels.rereference != "average")
         ]
         anodes.extend(df_picks.name)
         cathodes.extend(df_picks.rereference)
@@ -101,6 +103,7 @@ def preprocess(
     raw: mne.io.BaseRaw,
     nm_channels_dir: Path,
     filename: Optional[Union[str, Path, mne_bids.BIDSPath]] = None,
+    ecog_average_ref: bool = True,
     line_freq: Optional[int] = None,
     resample_freq: Optional[Union[int, float]] = 500,
     high_pass: Optional[Union[int, float]] = None,
@@ -120,14 +123,15 @@ def preprocess(
     if not raw.preload:
         raw.load_data(verbose=False)
 
-    raw = raw.set_eeg_reference(
-        ref_channels="average", ch_type="ecog", verbose=False
-    )
+    if ecog_average_ref:
+        raw = raw.set_eeg_reference(
+            ref_channels="average", ch_type="ecog", verbose=False
+        )
+        raw = raw.rename_channels(
+            {ch: f"{ch}-avgref" for ch in raw.ch_names if "ECOG" in ch}
+        )
 
-    raw = raw.rename_channels(
-        {ch: f"{ch}-avgref" for ch in raw.ch_names if "ECOG" in ch}
-    )
-    anodes, cathodes, ch_names = references_from_nm_channels(
+    anodes, cathodes, ch_names = bipolar_refs_from_nm_channels(
         nm_channels_dir=nm_channels_dir, filename=filename
     )
     if not ch_names:
@@ -146,7 +150,8 @@ def preprocess(
     raw = raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=False)
 
     notch_freqs = np.arange(line_freq, raw.info["sfreq"] / 2, line_freq)
-    raw = raw.notch_filter(notch_freqs, verbose=False)
+    if notch_freqs.size > 0:
+        raw = raw.notch_filter(notch_freqs, verbose=False)
 
     raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
 
