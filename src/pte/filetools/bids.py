@@ -214,8 +214,6 @@ def rewrite_bids_file(
         for file in Path(current_dir).glob("*electrodes.tsv"):
             _rewrite_electrodes(file=file, raw=raw)
 
-        # Check for success
-        raw = mne_bids.read_raw_bids(bids_path, verbose=False)
     except Exception as exception:
         print("Rewriting failed, cleaning up...")
         for file in Path(backup_dir).glob("*"):
@@ -225,6 +223,9 @@ def rewrite_bids_file(
     finally:
         # Clean up
         shutil.rmtree(backup_dir)
+
+    # Check for success
+    raw = mne_bids.read_raw_bids(bids_path, verbose=False)
 
     return raw
 
@@ -354,6 +355,7 @@ def _rewrite_channels(
                 for i in range(len(data_old.columns))
             }
             add_dict.update(
+                status="good",
                 description=_get_description(ch_type),
                 type=ch_type.upper(),
                 group=_get_group(ch_name),

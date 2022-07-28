@@ -5,7 +5,7 @@ import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence, Union
+from typing import Sequence
 
 import mne_bids
 
@@ -14,8 +14,8 @@ import mne_bids
 class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
-    hemispheres: Union[dict, None] = field(default_factory=dict)
-    directory: Union[Path, str] = field(init=False)
+    hemispheres: dict[str, str] | None = field(default_factory=dict)
+    directory: Path | str = field(init=False)
     files: list = field(init=False, default_factory=list)
 
     def __str__(self):
@@ -48,13 +48,13 @@ class FileFinder(ABC):
     @abstractmethod
     def find_files(
         self,
-        directory: Union[str, Path],
-        extensions: Optional[Union[Sequence, str]] = None,
-        keywords: Optional[Union[list, str]] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[Union[str, list]] = None,
+        directory: Path | str,
+        extensions: str | Sequence | None = None,
+        keywords: str | Sequence[str] | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | Sequence[str] | None = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -63,18 +63,18 @@ class FileFinder(ABC):
     @abstractmethod
     def filter_files(
         self,
-        keywords: Optional[Union[str, list]] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[Union[str, list]] = None,
+        keywords: str | Sequence[str] | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | Sequence[str] | None = None,
         verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
 
     @staticmethod
     def _keyword_search(
-        files: list[str], keywords: Optional[Union[str, Sequence]]
+        files: Sequence[str], keywords: str | Sequence[str] | None
     ) -> list:
         if not keywords:
             return files
@@ -87,8 +87,8 @@ class FileFinder(ABC):
 
     def _find_files(
         self,
-        directory: Union[Path, str],
-        extensions: Optional[Union[Sequence, str]] = None,
+        directory: Path | str,
+        extensions: str | Sequence | None = None,
     ) -> None:
         """Find files in directory with optional extensions.
 
@@ -109,11 +109,11 @@ class FileFinder(ABC):
 
     def _filter_files(
         self,
-        keywords: Optional[Union[str, list[str]]] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[Union[str, list[str]]] = None,
+        keywords: str | Sequence[str] | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | Sequence[str] | None = None,
     ) -> None:
         """Filter filepaths for given parameters."""
         filtered_files = self.files
@@ -145,7 +145,7 @@ class FileFinder(ABC):
             else:
                 raise ValueError("Keyword for medication not valid.")
             filtered_files = self._keyword_search(filtered_files, [med])
-        if hemisphere:
+        if hemisphere is not None:
             matching_files = []
             for file in filtered_files:
                 subject = mne_bids.get_entities_from_fname(file)["subject"]
@@ -174,15 +174,15 @@ class DirectoryNotFoundError(Exception):
 
     def __init__(
         self,
-        directory: Union[Path, str],
-        message="Input directory was not found.",
+        directory: Path | str,
+        message: str = "Input directory was not found.",
     ):
         self.directory = directory
         self.message = message
         super().__init__(self.message)
 
     def __str__(self):
-        return f"{self.message} Got: {self.directory}."
+        return "\n".join((f"{self.message}", f"Got: {self.directory}."))
 
 
 class HemisphereNotSpecifiedError(Exception):
@@ -198,7 +198,7 @@ class HemisphereNotSpecifiedError(Exception):
         self,
         subject,
         hemispheres,
-        message=(
+        message: str = (
             "Input ECOG hemisphere is not specified in"
             " `filefinder_settings.py` for given subject."
         ),
@@ -209,7 +209,10 @@ class HemisphereNotSpecifiedError(Exception):
         super().__init__(self.message)
 
     def __str__(self):
-        return (
-            f"{self.message} Unspecified subject: {self.subject}."
-            f" Specified hemispheres: {self.hemispheres}."
+        return "\n".join(
+            (
+                self.message,
+                f"Unspecified subject: {self.subject}.",
+                f"Specified hemispheres: {self.hemispheres}.",
+            )
         )

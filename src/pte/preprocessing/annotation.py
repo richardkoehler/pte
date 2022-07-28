@@ -55,7 +55,6 @@ def annotate_trials(
     raw.set_annotations(annotations_new)
 
     raw.plot(
-        scalings="auto",
         block=True,
         title=f"{keyword} onset and end annotated. Please check annotations.",
     )

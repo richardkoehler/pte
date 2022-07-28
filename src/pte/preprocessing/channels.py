@@ -92,7 +92,7 @@ def add_squared_channel(
     events_ids = events[:, 0]
     data_squared = np.zeros((1, raw.n_times))
     for i in np.arange(0, len(events_ids), 2):
-        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0
+        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0 * 1e-6
 
     info = mne.create_info(
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]
@@ -148,7 +148,7 @@ def add_summation_channel(
     summation_channels: list[str],
     new_channel_name: str = "auto",
     inplace: bool = False,
-    scale_data_by_factor: Optional[Union[int, float]] = None,
+    scale_data_by_factor: int | float | None = None,
     sort_channels: bool = True,
 ) -> mne.io.BaseRaw:
     """Sum up signals from given channels and add to MNE Raw object.
@@ -163,6 +163,8 @@ def add_summation_channel(
         Channel name of new channel to be added
     inplace : bool. Default: False
         Set to True if Raw object should be modified in place.
+    scale_data_by_factor
+        Factor by which data to scale
     sort_channels: bool. Default: True
         Set to False if channel names should not be sorted alphabetically.
 
