@@ -91,21 +91,20 @@ def smooth_2d_array(
 
 def apply_baseline(
     power: mne.time_frequency.AverageTFR,
-    baseline: Optional[
-        Union[
-            tuple[Optional[Union[int, float]], Optional[Union[int, float]]],
-            np.ndarray,
-        ]
-    ] = (None, None),
-    baseline_mode: str = "zscore",
+    baseline: tuple[int | float | None, int | float | None]
+    | np.ndarray
+    | None = (None, None),
+    mode: str = "percent",
 ):
     """Apply baseline correction given interval or custom values."""
+    if baseline is None:
+        return power
     if not isinstance(baseline, np.ndarray):
         return power.apply_baseline(
-            baseline=baseline, mode=baseline_mode, verbose=False
+            baseline=baseline, mode=mode, verbose=False
         )
-    return _apply_baseline_array(
-        power=power, baseline=baseline, mode=baseline_mode
+    return apply_baseline_array(
+        power=power, baseline=baseline, mode=mode
     )
 
 
@@ -134,12 +133,12 @@ def apply_baseline(
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 #  OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE
 # USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-def _apply_baseline_array(
+def apply_baseline_array(
     power: mne.time_frequency.AverageTFR,
     baseline: np.ndarray,
-    mode: str,
+    mode: str = "percent",
 ) -> mne.time_frequency.AverageTFR:
-    """Apply baseline correction given array."""
+    """Apply baseline correction with array of baseline values."""
     data = power.data.copy()
     if not baseline.ndim == data.ndim:
         raise ValueError(
@@ -147,6 +146,12 @@ def _apply_baseline_array(
             " the same number of dimensions as `power`. Number of dimensions"
             f" `baseline`: {baseline.ndim}. Number of dimensions `power`:"
             f" {data.ndim}."
+        )
+    if not baseline.shape[:-1] == data.shape[:-1]:
+        raise ValueError(
+            "If `baseline` is an array of values, all dimensions but the last"
+            " must be the same as `power`. Shape of `baseline`:"
+            f" {baseline.shape}. Shape of `power`: {data.shape}."
         )
     mean = np.mean(data, axis=-1, keepdims=True)
 
@@ -176,7 +181,7 @@ def _apply_baseline_array(
     else:
         raise ValueError(f"Unknown baseline correction mode: {mode}.")
 
-    power.data = power.data - data
+    power.data = data
 
     return power
 
@@ -241,18 +246,14 @@ def get_baseline(
 
 
 def average_power(
-    powers: Union[
-        list[mne.time_frequency.AverageTFR], mne.time_frequency.AverageTFR
-    ],
-    picks: Union[str, list[str], slice],
-    baseline: Optional[
-        Union[
-            tuple[Optional[Union[int, float]], Optional[Union[int, float]]],
-            list[np.ndarray],
-        ]
-    ] = (None, None),
-    baseline_mode: str = "zscore",
-    clip: Optional[Union[int, float]] = None,
+    powers: list[mne.time_frequency.AverageTFR]
+    | mne.time_frequency.AverageTFR,
+    picks: str | list[str] | slice,
+    baseline: tuple[int | float | None, int | float | None]
+    | list[np.ndarray]
+    | None = (None, None),
+    baseline_mode: str | None = "zscore",
+    clip: int | float | None = None,
 ) -> mne.time_frequency.AverageTFR:
     """Return power averaged over given channel types or picks."""
     if not isinstance(powers, list):
@@ -263,22 +264,27 @@ def average_power(
         if not len(baseline) == len(powers):
             raise ValueError(
                 "If numpy arrays are provided for"
-                "c ustom baseline correction, the same number of numpy arrays"
+                "custom baseline correction, the same number of numpy arrays"
                 " and `power` (TFR) objects must be provided. Got:"
                 f" {len(baseline)} baseline arrays and {len(powers)} powers."
             )
 
     power_all = None
     power_all_files = []
-    for power in powers:
+    for i, power in enumerate(powers):
         power = power.copy().pick(picks=picks)
-        if baseline:
-            if not isinstance(baseline, list):
-                baseline_ = baseline
+        if baseline is not None:
+            if baseline_mode is None:
+                raise ValueError(
+                    "If baseline correction is performed, `baseline_mode`"
+                    f"must not be `None`."
+                )
+            if isinstance(baseline, list):
+                _baseline = baseline[i]
             else:
-                baseline_ = baseline
+                _baseline = baseline
             power = apply_baseline(
-                power=power, baseline=baseline_, baseline_mode=baseline_mode
+                power=power, baseline=_baseline, mode=baseline_mode
             )  # type: ignore
         df_power = power.to_data_frame(picks=picks)
         freqs = power.freqs  # type: ignore
@@ -342,11 +348,20 @@ def morlet_from_epochs(
     **kwargs,
 ) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
     """Calculate power with MNE's Morlet transform and sensible defaults."""
-    if freqs is None:
+    if isinstance(freqs, str):
+        if freqs != "auto":
+            raise ValueError(
+                f"If freqs is a string, it must be `auto`. Got: {freqs}"
+            )
         upper_freq = min(epochs.info["sfreq"] / 2, 200.0)
         freqs = np.arange(1.0, upper_freq)
 
-    if decim_power == "auto":
+    if isinstance(decim_power, str):
+        if decim_power != "auto":
+            raise ValueError(
+                "If decim_power is a string, it must be `auto`. Got:"
+                f" {decim_power}"
+            )
         decim = int(epochs.info["sfreq"] / 100)
     else:
         decim = decim_power
@@ -533,5 +548,5 @@ def power_from_bids(
 
     if out_dir:
         fname = Path(out_dir) / (str(bids_path.fpath.stem) + "_tfr.h5")
-        power.save(fname=fname, verbose=True)
+        power.save(fname=fname, verbose=True, overwrite=True)
     return power

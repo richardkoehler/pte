@@ -8,7 +8,7 @@ import mne_bids
 import pte
 
 
-def add_emg_rms(
+def process_emg_rms(
     raw_or_file: Union[mne.io.BaseRaw, mne_bids.BIDSPath],
     emg_channels: Union[str, list[str]],
     window_duration: Union[int, float] = 100,
@@ -42,12 +42,14 @@ def add_emg_rms(
         emg_channels = [emg_channels]
 
     for emg_channel in emg_channels:
+        analog_channel = [ch for ch in raw.ch_names if "ANALOG" in ch]
+        analog_channel = analog_channel[0] if analog_channel else None
         raw = pte.preprocessing.add_emg_rms(
             raw=raw,
             ch_name=emg_channel,
             window_duration=window_duration,
             new_ch_name="auto",
-            analog_channel=None,
+            analog_channel=analog_channel,
         )
 
     if annotate_trials:
