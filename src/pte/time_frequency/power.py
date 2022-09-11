@@ -1,6 +1,5 @@
 """Functions for calculating and handling band-power."""
 from pathlib import Path
-from typing import Optional, Union
 
 import matplotlib.figure
 import mne
@@ -14,8 +13,8 @@ import pte
 
 def plot_power(
     power: mne.time_frequency.AverageTFR,
-    title: Optional[str] = None,
-    fname: Optional[Union[str, Path]] = None,
+    title: str | None = None,
+    fname: str | Path | None = None,
     show: bool = True,
     **kwargs_plot,
 ) -> matplotlib.figure.Figure:
@@ -187,7 +186,7 @@ def apply_baseline_array(
 # This code is adapted from MNE-Python version 0.24.1 (mne.baseline.rescale())
 # For license information see above.
 def _get_baseline_indices(
-    baseline: tuple[Optional[Union[int, float]], Optional[Union[int, float]]],
+    baseline: tuple[int | float | None, int | float | None],
     times: np.ndarray,
 ) -> tuple[int, int]:
     """Get baseline indices from times array."""
@@ -222,10 +221,8 @@ def _get_baseline_indices(
 
 def get_baseline(
     powers: list[mne.time_frequency.AverageTFR],
-    picks: Union[str, list[str], slice],
-    baseline: tuple[
-        Optional[Union[int, float]], Optional[Union[int, float]]
-    ] = (None, None),
+    picks: str | list[str] | slice,
+    baseline: tuple[int | float | None, int | float | None] = (None, None),
 ) -> list[np.ndarray]:
     """Get baseline array of given list of AverageTFRs."""
     if not isinstance(powers, list):
@@ -290,7 +287,7 @@ def average_power(
         for freq in freqs:
             power_single_freq = (
                 df_power[df_power["freq"] == freq]
-                .sort_values(by="time", axis=0)
+                .sort_values(by="time", axis="index")
                 .drop(columns=["freq", "time"])
                 .to_numpy()
             )
@@ -324,10 +321,8 @@ def average_power(
 
 
 def load_power(
-    files: list[Union[Path, str]], verbose: bool = False
-) -> Union[
-    list[mne.time_frequency.AverageTFR], list[mne.time_frequency.EpochsTFR]
-]:
+    files: list[Path | str], verbose: bool = False
+) -> list[mne.time_frequency.AverageTFR] | list[mne.time_frequency.EpochsTFR]:
     """Load power from *-tfr.h5 files."""
     powers = []
     for file in files:
@@ -343,13 +338,13 @@ def load_power(
 def morlet_from_epochs(
     epochs: mne.Epochs,
     n_cycles: int = 7,
-    freqs: Union[np.ndarray, str] = "auto",
+    freqs: str | np.ndarray = "auto",
     average: bool = True,
     n_jobs: int = -1,
-    picks="all",
-    decim_power: Union[str, int, float] = "auto",
+    picks: str = "all",
+    decim_power: str | int | float = "auto",
     **kwargs,
-) -> Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]:
+) -> mne.time_frequency.AverageTFR | mne.time_frequency.EpochsTFR:
     """Calculate power with MNE's Morlet transform and sensible defaults."""
     if isinstance(freqs, str):
         if freqs != "auto":
@@ -386,16 +381,12 @@ def morlet_from_epochs(
 
 def epochs_from_raw(
     raw: mne.io.BaseRaw,
-    tmin: Union[int, float] = -6,
-    tmax: Union[int, float] = 6,
-    baseline: Optional[tuple] = None,
-    events_trial_onset: Optional[
-        Union[str, list[str], list[tuple[str, str]]]
-    ] = None,
-    events_trial_end: Optional[
-        Union[str, list[str], list[tuple[str, str]]]
-    ] = None,
-    min_distance_trials: Union[int, float] = 0,
+    tmin: int | float = -6,
+    tmax: int | float = 6,
+    baseline: tuple | None = None,
+    events_trial_onset: str | list[str | tuple[str, str]] | None = None,
+    events_trial_end: str | list[str | tuple[str, str]] | None = None,
+    min_distance_trials: int | float = 0,
     **kwargs,
 ) -> mne.Epochs:
     """Return epochs from given events."""
@@ -424,7 +415,7 @@ def epochs_from_raw(
 
 def get_events(
     raw: mne.io.BaseRaw,
-    event_picks: Union[str, list[str], list[tuple[str, str]]],
+    event_picks: str | list[str | tuple[str, str]],
 ) -> tuple[np.ndarray, dict]:
     """Get events from given Raw instance and event id."""
     if isinstance(event_picks, str):
@@ -457,8 +448,8 @@ def get_events(
 def discard_epochs(
     epochs: mne.Epochs,
     events_begin: np.ndarray,
-    min_distance_events: Union[int, float],
-    events_end: Optional[np.ndarray] = None,
+    min_distance_events: int | float,
+    events_end: np.ndarray | None = None,
 ) -> mne.Epochs:
     """Discard epochs based on minimal distance between event onset and end."""
     if events_end is not None:
@@ -477,17 +468,15 @@ def discard_epochs(
 def power_from_bids(
     bids_path: mne_bids.BIDSPath,
     nm_channels_dir: Path,
-    events_trial_onset: Optional[list[str]] = None,
-    events_trial_end: Optional[list[str]] = None,
-    min_distance_trials: Union[int, float] = 0,
-    bad_epochs_dir: Optional[Union[Path, str]] = None,
-    out_dir: Optional[Union[Path, str]] = None,
-    kwargs_preprocess: Optional[dict] = None,
-    kwargs_epochs: Optional[dict] = None,
-    kwargs_power: Optional[dict] = None,
-) -> Optional[
-    Union[mne.time_frequency.AverageTFR, mne.time_frequency.EpochsTFR]
-]:
+    events_trial_onset: list[str] | None = None,
+    events_trial_end: list[str] | None = None,
+    min_distance_trials: int | float = 0,
+    bad_epochs_dir: Path | str | None = None,
+    out_dir: Path | str | None = None,
+    kwargs_preprocess: dict | None = None,
+    kwargs_epochs: dict | None = None,
+    kwargs_power: dict | None = None,
+) -> mne.time_frequency.AverageTFR | mne.time_frequency.EpochsTFR | None:
     """Calculate power from single file."""
     print(f"File: {bids_path.basename}")
     raw = mne_bids.read_raw_bids(bids_path, verbose=False)
