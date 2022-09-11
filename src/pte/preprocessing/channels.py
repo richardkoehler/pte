@@ -39,7 +39,7 @@ def add_emg_rms(
         raw.load_data()
 
     raw_rms = pte.preprocessing.emg.get_emg_rms(
-        raw=raw,
+        raw=raw.copy(),
         emg_ch=ch_name,
         window_duration=[window_duration],
         analog_ch=analog_channel,

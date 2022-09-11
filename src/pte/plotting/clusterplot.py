@@ -15,7 +15,7 @@ def clusterplot_combined(
     n_perm: int = 100,
     title: str | None = None,
     borderval_cbar: str | int | float = "auto",
-    out_path: Path | str | None = None,
+    outpath: Path | str | None = None,
     show_plot: bool = True,
     n_jobs: int = 1,
 ) -> matplotlib.figure.Figure:
@@ -94,8 +94,8 @@ def clusterplot_combined(
     fig.colorbar(pos_2, ax=axs[2], label=f"Signif. Clusters (p ≤ {alpha})")
     fig.suptitle(title)
     plt.tight_layout()
-    if out_path:
-        fig.savefig(out_path, bbox_inches="tight", dpi=300)
+    if outpath:
+        fig.savefig(outpath, bbox_inches="tight", dpi=300)
     if show_plot:
         plt.show()
     return fig

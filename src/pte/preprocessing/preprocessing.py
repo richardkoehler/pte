@@ -103,7 +103,7 @@ def preprocess(
     raw: mne.io.BaseRaw,
     nm_channels_dir: Path,
     filename: Optional[Union[str, Path, mne_bids.BIDSPath]] = None,
-    ecog_average_ref: bool = True,
+    average_ref_types: Sequence[str] | None = ("ecog",),
     line_freq: Optional[int] = None,
     resample_freq: Optional[Union[int, float]] = 500,
     high_pass: Optional[Union[int, float]] = None,
@@ -123,13 +123,20 @@ def preprocess(
     if not raw.preload:
         raw.load_data(verbose=False)
 
-    if ecog_average_ref:
-        raw = raw.set_eeg_reference(
-            ref_channels="average", ch_type="ecog", verbose=False
-        )
-        raw = raw.rename_channels(
-            {ch: f"{ch}-avgref" for ch in raw.ch_names if "ECOG" in ch}
-        )
+    if average_ref_types:
+        for pick_type in average_ref_types:
+            raw = raw.set_eeg_reference(
+                ref_channels="average", ch_type=pick_type, verbose=False
+            )
+            raw = raw.rename_channels(
+                {
+                    ch: f"{ch}-avgref"
+                    for ch, ch_type in zip(
+                        raw.ch_names, raw.get_channel_types()
+                    )
+                    if ch_type == pick_type
+                }
+            )
 
     anodes, cathodes, ch_names = bipolar_refs_from_nm_channels(
         nm_channels_dir=nm_channels_dir, filename=filename

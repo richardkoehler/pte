@@ -103,9 +103,7 @@ def apply_baseline(
         return power.apply_baseline(
             baseline=baseline, mode=mode, verbose=False
         )
-    return apply_baseline_array(
-        power=power, baseline=baseline, mode=mode
-    )
+    return apply_baseline_array(power=power, baseline=baseline, mode=mode)
 
 
 # This code is adapted from MNE-Python version 0.24.1 (mne.baseline.rescale())
@@ -326,14 +324,19 @@ def average_power(
 
 
 def load_power(
-    files: list[Union[Path, str]]
+    files: list[Union[Path, str]], verbose: bool = False
 ) -> Union[
     list[mne.time_frequency.AverageTFR], list[mne.time_frequency.EpochsTFR]
 ]:
     """Load power from *-tfr.h5 files."""
     powers = []
     for file in files:
-        powers.append(mne.time_frequency.read_tfrs(file, condition=0))
+        power = mne.time_frequency.read_tfrs(file)
+        if isinstance(power, list):
+            if verbose:
+                print("Only returning first object from tfr file.")
+            power = power[0]
+        powers.append(power)
     return powers
 
 
