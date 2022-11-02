@@ -3,9 +3,9 @@
 import os
 import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
 
 import mne_bids
 

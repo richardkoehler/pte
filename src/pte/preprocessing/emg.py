@@ -1,6 +1,7 @@
 """Module for processing of EMG channels."""
 
-from typing import Optional, Sequence, Union
+from collections.abc import Sequence
+from typing import Optional, Union
 
 import mne
 import numpy as np
@@ -9,11 +10,11 @@ from numba import njit
 
 def get_emg_rms(
     raw: mne.io.BaseRaw,
-    emg_ch: Union[str, list[str], np.ndarray],
-    window_duration: Union[float, int, Sequence],
-    analog_ch: Optional[Union[list[str], str]] = None,
+    emg_ch: str | list[str] | np.ndarray,
+    window_duration: float | int | Sequence,
+    analog_ch: list[str] | str | None = None,
     rereference: bool = False,
-    notch_filter: Union[float, int] = 50,
+    notch_filter: float | int = 50,
 ) -> mne.io.BaseRaw:
     """Return root mean square with given window length of raw object.
 
@@ -79,7 +80,7 @@ def get_emg_rms(
         rms_raw = _rms_window_nb(data, window, raw.info["sfreq"])
         rms_zscore = (rms_raw - np.mean(rms_raw)) / np.std(rms_raw)
         # now scale for compatibility with other MISC channels
-        data_rms[idx, :] = rms_zscore * 1e-6
+        data_rms[idx, :] = rms_zscore
 
     emg_ch_names = [f"EMG_RMS_{window}" for window in window_duration]
 
@@ -111,7 +112,7 @@ def get_emg_rms(
 
 @njit
 def _rms_window_nb(
-    data: np.ndarray, window_len: Union[float, int], sfreq: Union[float, int]
+    data: np.ndarray, window_len: float | int, sfreq: float | int
 ) -> np.ndarray:
     """Return root mean square of input signal with given window length.
 

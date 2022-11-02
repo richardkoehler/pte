@@ -8,8 +8,8 @@ import pandas as pd
 
 
 def get_bad_epochs(
-    filename: Union[Path, str, mne_bids.BIDSPath],
-    bad_epochs_dir: Optional[Union[Path, str]] = None,
+    filename: Path | str | mne_bids.BIDSPath,
+    bad_epochs_dir: Path | str | None = None,
 ) -> pd.DataFrame:
     """Get DataFrame of bad epochs from *_badepochs file."""
     if bad_epochs_dir is not None:

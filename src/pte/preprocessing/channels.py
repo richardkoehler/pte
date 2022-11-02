@@ -1,6 +1,6 @@
 """Module for processing channels in electrophysiological data."""
 
-from typing import Optional, Union
+from collections.abc import Sequence
 
 import mne
 import numpy as np
@@ -11,9 +11,9 @@ import pte.preprocessing.emg
 def add_emg_rms(
     raw: mne.io.BaseRaw,
     ch_name: str,
-    window_duration: Union[int, float] = 100,
+    window_duration: int | float = 100,
     new_ch_name: str = "auto",
-    analog_channel: Optional[Union[str, list[str]]] = None,
+    analog_channel: str | Sequence[str] | None = None,
 ) -> mne.io.BaseRaw:
     """Add root mean square (RMS) of given bipolar EMG channel.
 
@@ -48,7 +48,7 @@ def add_emg_rms(
 
     rms_channel = f"EMG_RMS_{window_duration}"
 
-    raw_rms.plot(scalings="auto", block=True, title="EMG Root Mean Square:")
+    raw_rms.plot(scalings="auto", block=True, title="EMG Root Mean Square (RMS)")
 
     raw = raw.add_channels(  # type: ignore
         [raw_rms.pick_channels([rms_channel])],
@@ -92,7 +92,7 @@ def add_squared_channel(
     events_ids = events[:, 0]
     data_squared = np.zeros((1, raw.n_times))
     for i in np.arange(0, len(events_ids), 2):
-        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0 * 1e-6
+        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0 # * 1e-6
 
     info = mne.create_info(
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]
@@ -109,7 +109,7 @@ def add_squared_channel(
     return raw
 
 
-def summation_channel_name(summation_channels: list[str]) -> str:
+def summation_channel_name(summation_channels: Sequence[str]) -> str:
     """Create channel name for summation montage from given channels."""
     base_items = None
     channel_numbers = []
@@ -124,7 +124,7 @@ def summation_channel_name(summation_channels: list[str]) -> str:
     return summation_channel
 
 
-def bipolar_channel_name(channels: list[str]) -> str:
+def bipolar_channel_name(channels: Sequence[str]) -> str:
     """Create channel name for bipolar montage from two given channels."""
     if len(channels) != 2:
         raise ValueError(
@@ -145,7 +145,7 @@ def bipolar_channel_name(channels: list[str]) -> str:
 
 def add_summation_channel(
     raw: mne.io.BaseRaw,
-    summation_channels: list[str],
+    summation_channels: Sequence[str],
     new_channel_name: str = "auto",
     inplace: bool = False,
     scale_data_by_factor: int | float | None = None,

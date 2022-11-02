@@ -1,8 +1,9 @@
 """Find and filter files. Supports BIDSPath objects from `mne-bids`."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence, Union
+from typing import Optional, Union
 
 import mne_bids
 
@@ -10,7 +11,7 @@ from pte.filetools.filefinder_abc import DirectoryNotFoundError, FileFinder
 
 
 def get_filefinder(
-    datatype: str, hemispheres: Optional[dict] = None, **kwargs
+    datatype: str, hemispheres: dict | None = None, **kwargs
 ) -> FileFinder:
     """Create and return FileFinder of desired type.
 
@@ -41,13 +42,13 @@ class DefaultFinder(FileFinder):
 
     def find_files(
         self,
-        directory: Union[Path, str],
-        extensions: Optional[Union[Sequence, str]] = None,
-        keywords: Optional[Union[list[str], str]] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        directory: Path | str,
+        extensions: Sequence | str | None = None,
+        keywords: list[str] | str | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -75,11 +76,11 @@ class DefaultFinder(FileFinder):
 
     def filter_files(
         self,
-        keywords: Optional[list] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        keywords: list | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Filter filepaths for given parameters and return filtered list."""
@@ -103,12 +104,12 @@ class BIDSFinder(FileFinder):
     def find_files(
         self,
         directory: str,
-        extensions: Optional[Union[Sequence, str]] = (".vhdr", ".edf"),
-        keywords: Optional[list] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        extensions: Sequence | str | None = (".vhdr", ".edf"),
+        keywords: list | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ):
         """Find files in directory with optional keywords and extensions.
@@ -136,11 +137,11 @@ class BIDSFinder(FileFinder):
 
     def filter_files(
         self,
-        keywords: Optional[list] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        keywords: list | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""

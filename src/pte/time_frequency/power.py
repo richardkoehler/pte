@@ -5,8 +5,8 @@ import matplotlib.figure
 import mne
 import mne_bids
 import numpy as np
-from matplotlib import pyplot as plt
 import scipy.ndimage
+from matplotlib import pyplot as plt
 
 import pte
 
@@ -272,14 +272,12 @@ def average_power(
             if baseline_mode is None:
                 raise ValueError(
                     "If baseline correction is performed, `baseline_mode`"
-                    f"must not be `None`."
+                    "must not be `None`."
                 )
             if isinstance(baseline, list):
-                _baseline = baseline[i]
-            else:
-                _baseline = baseline
+                baseline = baseline[i]
             power = apply_baseline(
-                power=power, baseline=_baseline, mode=baseline_mode
+                power=power, baseline=baseline, mode=baseline_mode
             )  # type: ignore
         df_power = power.to_data_frame(picks=picks)
         freqs = power.freqs  # type: ignore

@@ -6,7 +6,7 @@ from typing import Optional, Union
 import numpy as np
 import pandas as pd
 import scipy.io
-from matplotlib import cm, figure, collections
+from matplotlib import cm, collections, figure
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -26,8 +26,8 @@ def meshplot_2d_compare(
     lims_right: tuple[tuple, tuple] = ((None, None), (None, None)),
     outpath: Path | str | None = None,
     dot_size: int = 20,
-    ratio_cortex_subcortex: Union[int, float] = 4,
-    title: Optional[str] = None,
+    ratio_cortex_subcortex: int | float = 4,
+    title: str | None = None,
     invert_colors_left: bool = False,
     invert_colors_right: bool = False,
     show: bool = True,
@@ -49,8 +49,8 @@ def meshplot_2d_compare(
     fig, axes = plt.subplots(
         nrows=2,
         ncols=1,
-        figsize=(8, 9),
-        frameon=False,  # facecolor=(0, 0, 0),
+        # figsize=(8, 9),
+        frameon=False,
         gridspec_kw={"height_ratios": [height_cortex, height_subcort]},
     )
     axes = np.asarray(axes)
@@ -106,14 +106,13 @@ def meshplot_2d_compare(
                 shrink=0.8,
                 ticklocation=location,
             )
-            cbar.set_label(label_cbars[idx], color=color, size="large")
+            cbar.set_label(label_cbars[idx], color=color)
             cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
             ticks_loc = cbar.ax.get_yticks().tolist()
             cbar.ax.yaxis.set_major_locator(ticker.FixedLocator(ticks_loc))
             cbar.ax.set_yticklabels(
                 labels=np.round(cbar.get_ticks(), 2),
-                color=color,
-                fontsize="large",
+                color=color
             )
             cbar.outline.set_edgecolor(color)
 
@@ -126,7 +125,7 @@ def meshplot_2d_compare(
 
 
 def _get_lims(
-    data: np.ndarray, num_devs: Union[int, float]
+    data: np.ndarray, num_devs: int | float
 ) -> tuple[float, float]:
     """Get lower and upper limit in standard deviations."""
     mean = np.nanmean(data)

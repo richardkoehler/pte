@@ -2,10 +2,4 @@
 
 __version__ = "0.1.0.dev1"
 
-from . import (
-    filetools,
-    pipelines,
-    plotting,
-    preprocessing,
-    time_frequency,
-)
+from . import filetools, pipelines, plotting, preprocessing, time_frequency

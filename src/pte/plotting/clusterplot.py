@@ -1,10 +1,10 @@
 """Module for plotting clusters."""
 from pathlib import Path
 
-from matplotlib import pyplot as plt
 import matplotlib.figure
 import numpy as np
 import pte_stats
+from matplotlib import pyplot as plt
 
 
 def clusterplot_combined(
