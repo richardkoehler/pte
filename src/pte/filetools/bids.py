@@ -3,7 +3,6 @@
 import shutil
 from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Union
 
 import mne
 import mne_bids

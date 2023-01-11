@@ -16,7 +16,7 @@ def clusterplot_combined(
     title: str | None = None,
     borderval_cbar: str | int | float = "auto",
     outpath: Path | str | None = None,
-    show_plot: bool = True,
+    show: bool = True,
     n_jobs: int = 1,
 ) -> matplotlib.figure.Figure:
     """Plot power, p-values and significant clusters."""
@@ -35,7 +35,7 @@ def clusterplot_combined(
         borderval_cbar = min(power_av.max(), np.abs(power_av.min()))
 
     fig, axs = plt.subplots(
-        nrows=3, ncols=1, figsize=(3, 6), sharex=True, sharey=True
+        nrows=1, ncols=3, figsize=(12, 4.8), sharex=True, sharey=True
     )
     # Plot averaged power
     pos_0 = axs[0].imshow(
@@ -50,7 +50,7 @@ def clusterplot_combined(
     fig.colorbar(
         pos_0,
         ax=axs[0],
-        label="Power (Norm.)",
+        label="Power (AU)",
     )
 
     # Plot p-values
@@ -93,9 +93,9 @@ def clusterplot_combined(
     )
     fig.colorbar(pos_2, ax=axs[2], label=f"Signif. Clusters (p ≤ {alpha})")
     fig.suptitle(title)
-    plt.tight_layout()
+    fig.tight_layout()
     if outpath:
-        fig.savefig(outpath, bbox_inches="tight", dpi=300)
-    if show_plot:
+        fig.savefig(outpath)
+    if show:
         plt.show()
     return fig

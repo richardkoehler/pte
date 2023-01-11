@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any
 
 import mne_bids
 
@@ -39,6 +39,17 @@ def get_filefinder(
 @dataclass
 class DefaultFinder(FileFinder):
     """Class for finding and handling any type of file."""
+
+    def __iter__(self):
+        self._n = 0
+        return self
+
+    def __next__(self) -> Any:
+        if self._n == len(self.files):
+            raise StopIteration
+        file = self.files[self._n]
+        self._n += 1
+        return file
 
     def find_files(
         self,
@@ -111,7 +122,7 @@ class BIDSFinder(FileFinder):
         medication: str | None = None,
         exclude: str | None = None,
         verbose: bool = False,
-    ):
+    ) -> None:
         """Find files in directory with optional keywords and extensions.
 
 
@@ -193,15 +204,15 @@ class FinderNotFoundError(Exception):
         self,
         datatype,
         finders,
-        message="Input ``datatype`` is not an allowed value.",
+        message="Input `datatype` is not an allowed value.",
     ) -> None:
         self.datatype = datatype
-        self.finders = finders.values
+        self.finders = tuple(val for val in finders)
         self.message = message
         super().__init__(self.message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
-            f"{{self.message}} Allowed values: {self.finders}."
+            f"{self.message} Allowed values: {self.finders}."
             f" Got: {self.datatype}."
         )

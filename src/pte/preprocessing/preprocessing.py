@@ -124,12 +124,12 @@ def preprocess(
 
     # raw.pick(picks=["ecog", "dbs"], verbose=False)
     if not raw.preload:
-        raw.load_data(verbose=False)
+        raw.load_data(verbose=True)
 
     if average_ref_types:
         for pick_type in average_ref_types:
             raw.set_eeg_reference(
-                ref_channels="average", ch_type=pick_type, verbose=False
+                ref_channels="average", ch_type=pick_type, verbose=True
             )
             raw.rename_channels(
                 {
@@ -154,15 +154,23 @@ def preprocess(
             ch_name=ch_names,
             drop_refs=True,
         )
+        bads = raw.info['bads']
+        for ch in ch_names:
+            if ch in bads:
+                bads.remove(ch) 
 
-    raw.resample(sfreq=resample_freq, verbose=False)
+    raw.resample(sfreq=resample_freq, verbose=True)
 
-    raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=False)
+    raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=True)
 
     if notch_filter is not None:
-        notch_freqs = np.arange(notch_filter, raw.info["sfreq"] / 2, notch_filter)
+        notch_freqs = np.arange(
+            notch_filter, 
+            raw.info["sfreq"] / 2,
+            notch_filter
+            )
         if notch_freqs.size > 0:
-            raw.notch_filter(notch_freqs, verbose=False)
+            raw.notch_filter(notch_freqs, verbose=True)
 
     raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
 
