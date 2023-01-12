@@ -1,7 +1,9 @@
-[![Homepage][homepage-shield]][homepage-url]
+[![Python Versions][python-shield]][python-url]
+[![PyPi][pypi-shield]][pypi-url]
 [![License][license-shield]][license-url]
 [![Contributors][contributors-shield]][contributors-url]
 [![Code Style][codestyle-shield]][codestyle-url]
+[![Homepage][homepage-shield]][homepage-url]
 
 
 # PTE - Python tools for electrophysiology
@@ -12,16 +14,26 @@ PTE builds upon the packages [MNE](https://mne.tools/stable/index.html) and [MNE
 
 ## Installing PTE
 
-First, get the current development version of PTE using [git](https://git-scm.com/). Type the following command into a terminal:
+### Stable release
+
+To install the latest stable release, simply type:
 
 ```bash
-git clone https://github.com/richardkoehler/pte
+$ pip install pte-stats
+```
+
+### Development version
+
+To install the latest delevopment version, first clone this repository using [git](https://git-scm.com/):
+
+```bash
+$ git clone https://github.com/richardkoehler/pte
 ```
 
 Use the package manager [conda](https://docs.conda.io/projects/conda/en/latest/index.html) to set up a new working environment. To do so navigate to the PTE root directory in your terminal and type:
 
 ```bash
-conda env create -f env.yml
+$ conda env create -f env.yml
 ```
 
 This will set up a new conda environment called ``pte``.
@@ -29,13 +41,13 @@ This will set up a new conda environment called ``pte``.
 To activate the environment then type:
 
 ```bash
-conda activate pte
+$ conda activate pte
 ```
 
-Finally, to install PTE in an editable development version inside your conda environment type the following inside the PTE root directory:
+If you want to install pte-stats into an existing environment, type:
 
 ```bash
-conda develop .
+$ pip install -e .
 ```
 
 ## Usage
@@ -56,8 +68,8 @@ For any major changes, make sure to open an **issue** first. When you then creat
 To contribute yourselves, consider installing the full conda development environment to include such tools as black, pylint and isort:
 
 ```bash
-conda env create -f env_dev.yml
-conda activate pte-dev
+$ conda env create -f env_dev.yml
+$ conda activate pte-dev
 ```
 
 Continuous Integration (CI) including automated testing are set up.
@@ -67,11 +79,15 @@ PTE is licensed under the [MIT license](license-url).
 
 <!-- MARKDOWN LINKS & IMAGES -->
 <!-- https://www.markdownguide.org/basic-syntax/#reference-style-links -->
-[homepage-shield]: https://img.shields.io/static/v1?label=Homepage&message=ICN&logoColor=black&labelColor=grey&logoWidth=20&color=9cf&style=for-the-badge
+[python-shield]: https://img.shields.io/static/v1?label=Python&message=3.10&logoColor=black&labelColor=grey&color=blue
+[python-url]: https://pypi.org/project/pte-stats/
+[homepage-shield]: https://img.shields.io/static/v1?label=Homepage&message=ICN&logoColor=black&labelColor=grey&color=9cf
 [homepage-url]: https://www.icneuromodulation.org/
-[contributors-shield]: https://img.shields.io/github/contributors/richardkoehler/pte.svg?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/richardkoehler/pte.svg?
 [contributors-url]: https://github.com/richardkoehler/pte/graphs/contributors
-[license-shield]: https://img.shields.io/static/v1?label=License&message=MIT&logoColor=black&labelColor=grey&logoWidth=20&color=yellow&style=for-the-badge
+[license-shield]: https://img.shields.io/static/v1?label=License&message=MIT&logoColor=black&labelColor=grey&color=yellow
 [license-url]: https://github.com/richardkoehler/pte/blob/main/LICENSE/
-[codestyle-shield]: https://img.shields.io/static/v1?label=CodeStyle&message=black&logoColor=black&labelColor=grey&logoWidth=20&color=black&style=for-the-badge
+[codestyle-shield]: https://img.shields.io/static/v1?label=CodeStyle&message=black&logoColor=black&labelColor=grey&color=black
 [codestyle-url]: https://github.com/psf/black
+[pypi-shield]: https://img.shields.io/static/v1?label=PyPi&message=v0.1.0&logoColor=black&labelColor=grey&color=blue
+[pypi-url]: https://pypi.org/project/pte/

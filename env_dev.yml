@@ -1,28 +1,8 @@
 name: pte-dev
 channels:
-  - conda-forge
   - defaults
 dependencies:
-  # basic dependencies
-  - joblib
-  - matplotlib
-  - mne
-  - mne-bids
-  - numba
-  - numpy
-  - pandas
   - pip
-  - plotly
-  - python>=3.9
-  - scikit-image
-  - scipy
+  - python=3.10
   - pip:
-    - pte-stats    
-  # development dependencies
-  - black
-  - isort
-  - mypy
-  - pip-tools
-  - pylint
-  - pytest
-  - tox
+    - pte[dev]

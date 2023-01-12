@@ -3,9 +3,9 @@
 import os
 import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Sequence
 
 import mne_bids
 
@@ -16,9 +16,9 @@ class FileFinder(ABC):
 
     hemispheres: dict[str, str] | None = field(default_factory=dict)
     directory: Path | str = field(init=False)
-    files: list = field(init=False, default_factory=list)
+    files: list[str] = field(init=False, default_factory=list)
 
-    def __str__(self):
+    def __str__(self) -> str:
         if not self.files:
             return "No corresponding files found."
         headers = ["Index", "Filename"]
@@ -74,7 +74,7 @@ class FileFinder(ABC):
 
     @staticmethod
     def _keyword_search(
-        files: Sequence[str], keywords: str | Sequence[str] | None
+        files: list[str], keywords: str | Sequence[str] | None
     ) -> list:
         if not keywords:
             return files
@@ -118,7 +118,7 @@ class FileFinder(ABC):
         """Filter filepaths for given parameters."""
         filtered_files = self.files
         if exclude:
-            if not isinstance(exclude, list):
+            if isinstance(exclude, str):
                 exclude = [exclude]
             filtered_files = [
                 file
@@ -126,7 +126,7 @@ class FileFinder(ABC):
                 if not any(item in file for item in exclude)
             ]
         if keywords:
-            if not isinstance(keywords, list):
+            if isinstance(keywords, str):
                 keywords = [keywords]
             filtered_files = self._keyword_search(filtered_files, keywords)
         if stimulation:
@@ -176,12 +176,12 @@ class DirectoryNotFoundError(Exception):
         self,
         directory: Path | str,
         message: str = "Input directory was not found.",
-    ):
+    ) -> None:
         self.directory = directory
         self.message = message
         super().__init__(self.message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "\n".join((f"{self.message}", f"Got: {self.directory}."))
 
 
@@ -196,8 +196,8 @@ class HemisphereNotSpecifiedError(Exception):
 
     def __init__(
         self,
-        subject,
-        hemispheres,
+        subject: str,
+        hemispheres: dict[str, str],
         message: str = (
             "Input ECOG hemisphere is not specified in"
             " `filefinder_settings.py` for given subject."
@@ -208,7 +208,7 @@ class HemisphereNotSpecifiedError(Exception):
         self.message = message
         super().__init__(self.message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return "\n".join(
             (
                 self.message,

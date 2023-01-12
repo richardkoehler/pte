@@ -1,9 +1,8 @@
 """Module for handling datasets in BIDS-format."""
 
-from collections import defaultdict
 import shutil
+from collections import defaultdict
 from pathlib import Path
-from typing import Optional, Union
 
 import mne
 import mne_bids
@@ -378,7 +377,7 @@ def _rewrite_channels(
     )
 
 
-def _rewrite_electrodes(file: Union[str, Path], raw: mne.io.BaseRaw) -> None:
+def _rewrite_electrodes(file: str | Path, raw: mne.io.BaseRaw) -> None:
     """Update and rewrite electrodes.tsv file."""
     data_old: pd.DataFrame = pd.read_csv(  # type: ignore
         file, sep="\t", index_col=0
@@ -388,7 +387,7 @@ def _rewrite_electrodes(file: Union[str, Path], raw: mne.io.BaseRaw) -> None:
     electrodes_to_add = []
     for ch_name, ch_type in zip(raw.ch_names, raw.get_channel_types()):
         if (ch_name not in electrodes_old) and (
-            ch_type in ["ecog", "dbs", "seeg", "eeg"]
+            ch_type in ("ecog", "dbs", "seeg", "eeg")
         ):
             electrodes_to_add.append(ch_name)
 
@@ -405,7 +404,7 @@ def _rewrite_electrodes(file: Union[str, Path], raw: mne.io.BaseRaw) -> None:
 
 
 def get_bids_electrodes(
-    fname: str, root: Optional[str] = None, space: str = "MNI152NLin2009bAsym"
+    fname: str, root: str | None = None, space: str = "MNI152NLin2009bAsym"
 ) -> tuple[pd.DataFrame, mne_bids.BIDSPath]:
     """Read *electrodes.tsv file and return as pandas DataFrame.
 

@@ -1,13 +1,12 @@
 """Module for plotting quantitave results onto brain structures."""
 import copy
-import os
 from pathlib import Path
 from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
-import scipy
-from matplotlib import cm, collections
+import scipy.io
+from matplotlib import cm, collections, figure
 from matplotlib import pyplot as plt
 from matplotlib import ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -25,13 +24,15 @@ def meshplot_2d_compare(
     label_right: str = "",
     lims_left: tuple[tuple, tuple] = ((None, None), (None, None)),
     lims_right: tuple[tuple, tuple] = ((None, None), (None, None)),
-    fname: Union[os.PathLike, str, Path] = None,
+    outpath: Path | str | None = None,
     dot_size: int = 20,
-    ratio_cortex_subcortex: Union[int, float] = 4,
-    title: Optional[str] = None,
+    ratio_cortex_subcortex: int | float = 4,
+    title: str | None = None,
     invert_colors_left: bool = False,
     invert_colors_right: bool = False,
-) -> None:
+    show: bool = True,
+    verbose: bool = True,
+) -> figure.Figure:
     """Plot data on both hemispheres in a 2D view."""
     vertices = scipy.io.loadmat(str(RESOURCES / "vertices.mat"))
     stn_surf = scipy.io.loadmat(str(RESOURCES / "stn_surf.mat"))
@@ -48,10 +49,11 @@ def meshplot_2d_compare(
     fig, axes = plt.subplots(
         nrows=2,
         ncols=1,
-        figsize=(8, 9),
-        frameon=False,  # facecolor=(0, 0, 0),
+        # figsize=(8, 9),
+        frameon=False,
         gridspec_kw={"height_ratios": [height_cortex, height_subcort]},
     )
+    axes = np.asarray(axes)
 
     for i, (x, y) in enumerate([(x_ecog, y_ecog), (x_subcort, y_subcort)]):
         axes[i].scatter(x, y, c="gray", s=0.001)
@@ -73,6 +75,7 @@ def meshplot_2d_compare(
             dot_size=dot_size,
             key=key,
             reverse_cmap=invert_colors,
+            verbose=verbose,
         )
         ecog_list.append(plot_cort)
         stn_list.append(plot_stn)
@@ -103,26 +106,26 @@ def meshplot_2d_compare(
                 shrink=0.8,
                 ticklocation=location,
             )
-            cbar.set_label(label_cbars[idx], color=color, size="large")
+            cbar.set_label(label_cbars[idx], color=color)
             cbar.ax.yaxis.set_major_locator(ticker.MaxNLocator(5))
             ticks_loc = cbar.ax.get_yticks().tolist()
             cbar.ax.yaxis.set_major_locator(ticker.FixedLocator(ticks_loc))
             cbar.ax.set_yticklabels(
                 labels=np.round(cbar.get_ticks(), 2),
-                color=color,
-                fontsize="large",
+                color=color
             )
             cbar.outline.set_edgecolor(color)
 
     fig.suptitle(title)
-    if fname is not None:
-        fig.savefig(fname, dpi=300, bbox_inches="tight")
-    plt.show(block=True)
-    return axes
+    if outpath is not None:
+        fig.savefig(outpath, bbox_inches="tight")
+    if show:
+        plt.show(block=True)
+    return fig
 
 
 def _get_lims(
-    data: np.ndarray, num_devs: Union[int, float]
+    data: np.ndarray, num_devs: int | float
 ) -> tuple[float, float]:
     """Get lower and upper limit in standard deviations."""
     mean = np.nanmean(data)
@@ -133,13 +136,14 @@ def _get_lims(
 
 
 def _plot_single_hem(
-    data: np.ndarray,
+    data: pd.DataFrame,
     axes: np.ndarray,
     side: str,
     lims: tuple,
     dot_size: int,
     key: str,
     reverse_cmap: bool,
+    verbose: bool,
 ) -> tuple[collections.PathCollection, collections.PathCollection]:
     """Plot data for a single hemisphere."""
     data = data.dropna(axis=0, subset=["x", "y", "z"])
@@ -151,15 +155,16 @@ def _plot_single_hem(
 
     pos_list = []
     for i, ch_type in enumerate(("ECOG", "LFP")):
-        ind = data["Channel Name"].str.contains(ch_type)
+        ind = data["name"].str.contains(ch_type)
         coord = data.loc[ind, ["x", "y"]].to_numpy(dtype=np.float32)
         values = data.loc[ind, key].to_numpy(dtype=np.float32)
-        lims_ = list(lims[i])
-        for idx, lim in enumerate(lims_):
+        lims_list = list(lims[i])
+        for idx, lim in enumerate(lims_list):
             if lim:
                 new_lims = np.round(_get_lims(data=values, num_devs=lim), 2)
-                lims_[idx] = new_lims[idx]
-        print(f"Using color limits: {lims_}.")
+                lims_list[idx] = new_lims[idx]
+        if verbose:
+            print(f"Using color limits: {lims_list}.")
         pos = axes[i].scatter(
             np.abs(coord[:, 0]) * factor,
             coord[:, 1],
@@ -167,8 +172,8 @@ def _plot_single_hem(
             s=dot_size,
             alpha=0.8,
             cmap=cmap,
-            vmin=lims_[0],
-            vmax=lims_[1],
+            vmin=lims_list[0],
+            vmax=lims_list[1],
             plotnonfinite=True,
         )
         pos_list.append(pos)

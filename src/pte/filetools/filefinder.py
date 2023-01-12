@@ -1,8 +1,9 @@
 """Find and filter files. Supports BIDSPath objects from `mne-bids`."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Sequence, Union
+from typing import Any
 
 import mne_bids
 
@@ -10,7 +11,7 @@ from pte.filetools.filefinder_abc import DirectoryNotFoundError, FileFinder
 
 
 def get_filefinder(
-    datatype: str, hemispheres: Optional[dict] = None, **kwargs
+    datatype: str, hemispheres: dict | None = None, **kwargs
 ) -> FileFinder:
     """Create and return FileFinder of desired type.
 
@@ -39,15 +40,26 @@ def get_filefinder(
 class DefaultFinder(FileFinder):
     """Class for finding and handling any type of file."""
 
+    def __iter__(self):
+        self._n = 0
+        return self
+
+    def __next__(self) -> Any:
+        if self._n == len(self.files):
+            raise StopIteration
+        file = self.files[self._n]
+        self._n += 1
+        return file
+
     def find_files(
         self,
-        directory: Union[Path, str],
-        extensions: Optional[Union[Sequence, str]] = None,
-        keywords: Optional[Union[list[str], str]] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        directory: Path | str,
+        extensions: Sequence | str | None = None,
+        keywords: list[str] | str | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Find files in directory with optional
@@ -75,11 +87,11 @@ class DefaultFinder(FileFinder):
 
     def filter_files(
         self,
-        keywords: Optional[list] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        keywords: list | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Filter filepaths for given parameters and return filtered list."""
@@ -103,14 +115,14 @@ class BIDSFinder(FileFinder):
     def find_files(
         self,
         directory: str,
-        extensions: Optional[Union[Sequence, str]] = (".vhdr", ".edf"),
-        keywords: Optional[list] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        extensions: Sequence | str | None = (".vhdr", ".edf"),
+        keywords: list | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
-    ):
+    ) -> None:
         """Find files in directory with optional keywords and extensions.
 
 
@@ -136,11 +148,11 @@ class BIDSFinder(FileFinder):
 
     def filter_files(
         self,
-        keywords: Optional[list] = None,
-        hemisphere: Optional[str] = None,
-        stimulation: Optional[str] = None,
-        medication: Optional[str] = None,
-        exclude: Optional[str] = None,
+        keywords: list | None = None,
+        hemisphere: str | None = None,
+        stimulation: str | None = None,
+        medication: str | None = None,
+        exclude: str | None = None,
         verbose: bool = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
@@ -192,15 +204,15 @@ class FinderNotFoundError(Exception):
         self,
         datatype,
         finders,
-        message="Input ``datatype`` is not an allowed value.",
+        message="Input `datatype` is not an allowed value.",
     ) -> None:
         self.datatype = datatype
-        self.finders = finders.values
+        self.finders = tuple(val for val in finders)
         self.message = message
         super().__init__(self.message)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return (
-            f"{{self.message}} Allowed values: {self.finders}."
+            f"{self.message} Allowed values: {self.finders}."
             f" Got: {self.datatype}."
         )

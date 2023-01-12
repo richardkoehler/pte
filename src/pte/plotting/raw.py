@@ -11,13 +11,13 @@ import scipy.signal
 
 def plotly_mne(
     mne_raw: mne.io.BaseRaw,
-    file_name: Union[Path, str],
+    file_name: Path | str,
     time_slice: tuple = (),
-    plot_title: Optional[str] = None,
+    plot_title: str | None = None,
     decimate: bool = True,
     normalize: bool = True,
     detrend: str = "linear",
-    padding: Union[int, float] = 2,
+    padding: int | float = 2,
 ) -> None:
     """
     Creates (export) the (sliced) MNE raw signal as an HTML plotly plot.
@@ -68,13 +68,13 @@ def plotly_rawdata(
     time_array: np.ndarray,
     signals_array: np.ndarray,
     channels_array: np.ndarray,
-    sfreq: Union[int, float],
-    file_name: Union[str, Path],
-    plot_title: Optional[str] = None,
+    sfreq: int | float,
+    file_name: str | Path,
+    plot_title: str | None = None,
     decimate: bool = True,
     normalize: bool = True,
     detrend: str = "linear",
-    padding: Union[int, float] = 2,
+    padding: int | float = 2,
 ) -> None:
     """
     Creates (export) the signals as an HTML plotly plot.

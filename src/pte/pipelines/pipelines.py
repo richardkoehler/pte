@@ -1,6 +1,6 @@
 """Module for predefined processing pipelines."""
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Union
 
 import mne
 import mne_bids
@@ -9,21 +9,14 @@ import pte
 
 
 def process_emg_rms(
-    raw_or_file: Union[mne.io.BaseRaw, mne_bids.BIDSPath],
-    emg_channels: Union[str, list[str]],
-    window_duration: Union[int, float] = 100,
+    raw: mne.io.BaseRaw,
+    emg_channels: str | Sequence[str],
+    window_duration: int | float = 100,
     annotate_trials: bool = True,
     add_squared_channel: bool = True,
-    out_path: Optional[mne_bids.BIDSPath] = None,
+    out_path: mne_bids.BIDSPath | None = None,
 ) -> mne.io.BaseRaw:
     """Add EMG root mean square channels to Raw object and save."""
-    if isinstance(raw_or_file, mne_bids.BIDSPath):
-        raw: mne.io.BaseRaw = mne_bids.read_raw_bids(  # type: ignore
-            raw_or_file, verbose=False
-        )
-    else:
-        raw = raw_or_file
-
     if raw.filenames:
         prefix = f"File: {Path(raw.filenames[0]).name}. "
     else:

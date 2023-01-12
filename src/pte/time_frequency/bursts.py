@@ -6,15 +6,15 @@ import numpy as np
 
 def burst_length_and_amplitude(
     power: np.ndarray,
-    threshold: Union[int, float],
-    sfreq: Union[int, float],
+    threshold: int | float,
+    sfreq: int | float,
     return_burst_amplitude: bool = True,
     return_burst_indexes: bool = True,
-) -> Union[
-    np.ndarray,
-    tuple[np.ndarray, np.ndarray],
-    tuple[np.ndarray, np.ndarray, np.ndarray],
-]:
+) -> (
+    np.ndarray |
+    tuple[np.ndarray, np.ndarray] |
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+):
     """Calculates the duration, amplitude and indexes of bursts.
 
     Args:
@@ -33,7 +33,7 @@ def burst_length_and_amplitude(
         Burst length (in seconds), mean burst amplitude and start and end
         indexes of individual bursts
     """
-    bursts = np.zeros((power.shape[0] + 1))
+    bursts = np.zeros(power.shape[0] + 1)
     bursts[1:] = power >= threshold
     bursts_onoff = np.diff(bursts)
     isburst = False

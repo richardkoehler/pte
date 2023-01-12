@@ -13,8 +13,8 @@ RESOURCES = pathlib.Path(__file__).parent / "resources"
 #  This python code is adapted from Astrid Olave
 #  (https://github.com/aaolaveh/anat-from-MNI/blob/master/functions.py)
 def find_structure_mni(
-    mni_coords: np.ndarray, database: Optional[Union[pathlib.Path, str]] = None
-) -> Union[list[str], str]:
+    mni_coords: np.ndarray, database: pathlib.Path | str | None = None
+) -> list[str] | str:
     """
     Convert MNI coordinate to a description of brain structure in aal
 
@@ -80,7 +80,7 @@ def find_structure_mni(
 
 
 def mni2coor(
-    mni_coords: np.ndarray, matrix: Optional[np.ndarray] = None
+    mni_coords: np.ndarray, matrix: np.ndarray | None = None
 ) -> np.ndarray:
     """
     Convert mni coordinates to matrix coordinates.
@@ -122,7 +122,7 @@ def mni2coor(
     return vround(coords)
 
 
-def matlab_round(value: Union[int, float]) -> int:
+def matlab_round(value: int | float) -> int:
     """Round value to integer like round function in MATLAB.
 
     Arguments
