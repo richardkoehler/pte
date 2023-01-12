@@ -15,7 +15,7 @@ classifiers = [
 description = "PTE is an open-source software package for working with electrophysiological data"
 dynamic = ["version"]
 keywords = ["eeg", "ieeg", "dbs", "ecog", "lfp"]
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE"}
 maintainers = [
   {name = "Richard M. Köhler"},
 ]
