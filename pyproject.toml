@@ -4,12 +4,11 @@ requires = ["flit_core >=3.5,<4"]
 
 [project]
 authors = [
-  {name = "Richard Köhler"},
+  {name = "Richard M. Köhler"},
 ]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "License :: OSI Approved :: MIT License",
-  "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
@@ -18,7 +17,7 @@ dynamic = ["version"]
 keywords = ["eeg", "ieeg", "dbs", "ecog", "lfp"]
 license = {file = "LICENSE.txt"}
 maintainers = [
-  {name = "Richard Köhler"},
+  {name = "Richard M. Köhler"},
 ]
 name = "pte"
 readme = "README.md"
@@ -39,9 +38,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-deploy = [
-  "flit",
-]
 dev = [
   "black",
   "isort",
