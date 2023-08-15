@@ -35,6 +35,8 @@ dependencies = [
   "pte-stats",
   "scikit-image",
   "scipy",
+  "mne_qt_browser",
+  "pyqt5"
 ]
 
 [project.optional-dependencies]
