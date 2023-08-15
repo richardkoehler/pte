@@ -19,7 +19,7 @@ PTE builds upon the packages [MNE](https://mne.tools/stable/index.html) and [MNE
 To install the latest stable release, simply type:
 
 ```bash
-$ pip install pte-stats
+$ pip install pte
 ```
 
 ### Development version
