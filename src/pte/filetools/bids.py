@@ -365,7 +365,7 @@ def _rewrite_channels(
 
         index = pd.Index(channels_to_add, name="name")
         data_to_add = pd.DataFrame(add_list, index=index)
-        data_old = data_old.append(data_to_add, ignore_index=False)
+        data_old = pd.concat([data_old, data_to_add], ignore_index=False)
 
     data_old = data_old.reindex(index=channels_new)
     data_old.to_csv(
@@ -395,7 +395,7 @@ def _rewrite_electrodes(file: str | Path, raw: mne.io.BaseRaw) -> None:
         data=None, index=electrodes_to_add, columns=data_old.columns
     )
 
-    data_old = data_old.append(data_to_add, ignore_index=False)
+    data_old = pd.concat([data_old, data_to_add], ignore_index=False)
     data_old.sort_index(axis=0, inplace=True)
 
     data_old.to_csv(
