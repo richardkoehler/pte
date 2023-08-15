@@ -11,6 +11,7 @@ def clusterplot_combined(
     power_a: np.ndarray,
     power_b: np.ndarray | int | float,
     extent: tuple | list,
+    label: str = "Power[AU]",
     alpha: float = 0.05,
     n_perm: int = 100,
     title: str | None = None,
@@ -24,7 +25,7 @@ def clusterplot_combined(
     if isinstance(power_b, (int, float)):
         power_av = power_a.mean(axis=0)
     else:
-        power_av = power_a.mean(axis=0) - power_b.mean(axis=0)
+        power_av = power_b.mean(axis=0) - power_a.mean(axis=0)
 
     if isinstance(borderval_cbar, str):
         if borderval_cbar != "auto":
@@ -35,7 +36,7 @@ def clusterplot_combined(
         borderval_cbar = min(power_av.max(), np.abs(power_av.min()))
 
     fig, axs = plt.subplots(
-        nrows=1, ncols=3, figsize=(12, 4.8), sharex=True, sharey=True
+        nrows=1, ncols=3, figsize=(12, 3.6), sharex=True, sharey=True
     )
     # Plot averaged power
     pos_0 = axs[0].imshow(
@@ -47,30 +48,9 @@ def clusterplot_combined(
         vmin=borderval_cbar * -1,
         vmax=borderval_cbar,
     )
-    fig.colorbar(
-        pos_0,
-        ax=axs[0],
-        label="Power (AU)",
-    )
+    fig.colorbar(pos_0, ax=axs[0], label=label)
 
-    # Plot p-values
-    p_values = pte_stats.permutation_2d(
-        data_a=power_a,
-        data_b=power_b,
-        n_perm=n_perm,
-        two_tailed=True,
-    )
-    pos_1 = axs[1].imshow(
-        p_values,
-        extent=extent,
-        cmap="viridis_r",
-        aspect="auto",
-        origin="lower",
-    )
-    fig.colorbar(pos_1, ax=axs[1], label="p-values")
-
-    # Plot significant clusters
-    _, cluster_arr = pte_stats.cluster_analysis_2d(
+    p_values, _, cluster_arr = pte_stats.cluster_analysis_2d(
         data_a=power_a,
         data_b=power_b,
         alpha=alpha,
@@ -78,6 +58,20 @@ def clusterplot_combined(
         only_max_cluster=False,
         n_jobs=n_jobs,
     )
+
+    # Plot p-values
+    print(f"{p_values.min() = }")
+    pos_1 = axs[1].imshow(
+        p_values,
+        extent=extent,
+        norm="log",
+        cmap="viridis_r",
+        aspect="auto",
+        origin="lower",
+    )
+    fig.colorbar(pos_1, ax=axs[1], label="P [log]")
+
+    # Plot significant clusters
     squared = np.zeros(power_a.shape[1:])
     if cluster_arr:
         for cluster in cluster_arr:
@@ -91,11 +85,15 @@ def clusterplot_combined(
         aspect="auto",
         origin="lower",
     )
-    fig.colorbar(pos_2, ax=axs[2], label=f"Signif. Clusters (p ≤ {alpha})")
+    cbar = fig.colorbar(
+        pos_2, ax=axs[2], label=f"Signif. Clusters [P≤{alpha}]"
+    )
+    cbar.ax.set_yticks([0, 1])
+
     fig.suptitle(title)
     fig.tight_layout()
     if outpath:
-        fig.savefig(outpath)
+        fig.savefig(outpath, dpi=450)
     if show:
         plt.show()
     return fig

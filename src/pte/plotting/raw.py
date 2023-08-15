@@ -1,7 +1,6 @@
 """Plotting functions based on plotly."""
 
 from pathlib import Path
-from typing import Optional, Union
 
 import mne
 import numpy as np

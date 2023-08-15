@@ -1,7 +1,6 @@
 """Module for plotting quantitave results onto brain structures."""
 import copy
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import pandas as pd

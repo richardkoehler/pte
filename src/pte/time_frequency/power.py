@@ -1,5 +1,6 @@
 """Functions for calculating and handling band-power."""
 from pathlib import Path
+from typing import Literal
 
 import matplotlib.figure
 import mne
@@ -63,19 +64,19 @@ def smooth_power(
 
 def smooth_2d_array(
     data: np.ndarray,
-    smoothing_type: str = "gaussian",
+    smoothing_type: Literal["gaussian", "median"] = "gaussian",
     **kwargs,
 ) -> np.ndarray:
     """Smooth 2D data using scipy smoothing filters."""
     if smoothing_type == "gaussian":
         if "sigma" not in kwargs:
-            kwargs["sigma"] = 5
+            kwargs["sigma"] = 1
         data_out = scipy.ndimage.gaussian_filter(
             input=data, mode="reflect", **kwargs
         )
     elif smoothing_type == "median":
         if "size" not in kwargs:
-            kwargs["size"] = 5
+            kwargs["size"] = 1
         data_out = scipy.ndimage.median_filter(
             input=data,
             mode="reflect",
@@ -94,7 +95,7 @@ def apply_baseline(
     | np.ndarray
     | None = (None, None),
     mode: str = "percent",
-):
+) -> mne.time_frequency.AverageTFR:
     """Apply baseline correction given interval or custom values."""
     if baseline is None:
         return power

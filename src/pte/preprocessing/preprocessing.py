@@ -25,7 +25,7 @@ def pick_by_nm_channels(
             "No valid channels found in given nm_channels.csv file:"
             f" {fpath.name}"
         )
-    raw.pick_channels(ch_names=channel_picks["new_name"].to_list())
+    raw.pick(channel_picks["new_name"].to_list())
     return raw
 
 
@@ -64,7 +64,7 @@ def bipolar_refs_from_nm_channels(
 
 def bandstop_filter(
     raw: mne.io.BaseRaw,
-    bandstop_freq: str |int | float | np.ndarray | None = "auto",
+    bandstop_freq: str | int | float | np.ndarray | None = "auto",
     fname: str | None = None,
 ) -> mne.io.BaseRaw:
     """Bandstop filter Raw data"""
@@ -106,12 +106,13 @@ def preprocess(
     raw: mne.io.BaseRaw,
     nm_channels_dir: Path,
     filename: Path | str | mne_bids.BIDSPath | None = None,
-    average_ref_types: Sequence[str] | None = None,
+    average_ref_types: Sequence[str] | str | None = None,
+    ref_nm_channels: bool = True,
     notch_filter: int | Literal["auto"] | None = "auto",
-    resample_freq: int |float |None = 500,
-    high_pass: int |float |None = None,
-    low_pass: int |float |None = None,
-    bandstop_freq: str |int | float | np.ndarray | None = "auto",
+    resample_freq: int | float | None = 500,
+    high_pass: int | float | None = None,
+    low_pass: int | float | None = None,
+    bandstop_freq: str | int | float | np.ndarray | None = "auto",
     pick_used_channels: bool = False,
 ) -> mne.io.BaseRaw:
     """Preprocess raw data."""
@@ -127,6 +128,8 @@ def preprocess(
         raw.load_data(verbose=True)
 
     if average_ref_types:
+        if isinstance(average_ref_types, str):
+            average_ref_types = [average_ref_types]
         for pick_type in average_ref_types:
             raw.set_eeg_reference(
                 ref_channels="average", ch_type=pick_type, verbose=True
@@ -141,34 +144,38 @@ def preprocess(
                 }
             )
 
-    anodes, cathodes, ch_names = bipolar_refs_from_nm_channels(
-        nm_channels_dir=nm_channels_dir, filename=filename
-    )
-    if not ch_names:
-        print("No channels given for bipolar re-referencing.")
-    else:
-        raw = mne.set_bipolar_reference( # type: ignore
-            raw,
-            anode=anodes,
-            cathode=cathodes,
-            ch_name=ch_names,
-            drop_refs=True,
+    if ref_nm_channels:
+        anodes, cathodes, ch_names = bipolar_refs_from_nm_channels(
+            nm_channels_dir=nm_channels_dir, filename=filename
         )
-        bads = raw.info['bads']
-        for ch in ch_names:
-            if ch in bads:
-                bads.remove(ch) 
+        if not ch_names:
+            print("No channels given for bipolar re-referencing.")
+        else:
+            # Renaming necessary to account for possible name duplications
+            # anodes_map = {anode: f"{anode}_old" for anode in anodes}
+            # raw.rename_channels(anodes_map)
+            raw = mne.set_bipolar_reference(  # type: ignore
+                raw,
+                anode=anodes,  # list(anodes_map.values()),
+                cathode=cathodes,
+                ch_name=ch_names,
+                drop_refs=True,
+            )
+            bads = raw.info["bads"]
+            for ch in ch_names:
+                if ch in bads:
+                    bads.remove(ch)
 
-    raw.resample(sfreq=resample_freq, verbose=True)
+    if resample_freq is not None:
+        raw.resample(sfreq=resample_freq, verbose=True)
 
-    raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=True)
+    if high_pass is not None or low_pass is not None:
+        raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=True)
 
     if notch_filter is not None:
         notch_freqs = np.arange(
-            notch_filter, 
-            raw.info["sfreq"] / 2,
-            notch_filter
-            )
+            notch_filter, raw.info["sfreq"] / 2, notch_filter
+        )
         if notch_freqs.size > 0:
             raw.notch_filter(notch_freqs, verbose=True)
 

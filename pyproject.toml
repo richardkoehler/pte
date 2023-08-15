@@ -26,13 +26,14 @@ requires-python = ">=3.10"
 dependencies = [
   "joblib",
   "matplotlib",
-  "mne",
+  "mne[hdf5]",
   "mne-bids",
   "numba",
   "numpy",
   "pandas",
   "plotly",
   "pte-stats",
+  "pybv",
   "scikit-image",
   "scipy",
   "mne_qt_browser",
@@ -58,28 +59,16 @@ repository = "https://github.com/richardkoehler/pte"
 [tool.black]
 exclude = '''
 /(
-    __pycache__
-  | plotting/resources
+  __pycache__
 )/
-
-'''
-include = '''
-(
-    /tests
-  | /src
-)
 '''
 line-length = 79
-target-version = ['py310']
 
-[tool.isort]
-line_length = 79
-profile = "black"
-py_version = 310
-src_paths = ["src"]
+[tool.ruff]
+line-length = 79
 
-[tool.mypy]
-python_version = "3.10"
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401", "F403"]
 
 [[tool.mypy.overrides]]
 ignore_missing_imports = true

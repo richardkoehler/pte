@@ -1,5 +1,4 @@
 """Module for burst analysis."""
-from typing import Union
 
 import numpy as np
 

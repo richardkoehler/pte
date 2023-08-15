@@ -48,10 +48,12 @@ def add_emg_rms(
 
     rms_channel = f"EMG_RMS_{window_duration}"
 
-    raw_rms.plot(scalings="auto", block=True, title="EMG Root Mean Square (RMS)")
+    raw_rms.plot(
+        scalings="auto", block=True, title="EMG Root Mean Square (RMS)"
+    )
 
     raw = raw.add_channels(  # type: ignore
-        [raw_rms.pick_channels([rms_channel])],
+        [raw_rms.pick([rms_channel])],
         force_update_info=True,
     )
     if new_ch_name == "auto":
@@ -92,7 +94,7 @@ def add_squared_channel(
     events_ids = events[:, 0]
     data_squared = np.zeros((1, raw.n_times))
     for i in np.arange(0, len(events_ids), 2):
-        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0 # * 1e-6
+        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0  # * 1e-6
 
     info = mne.create_info(
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]

@@ -1,7 +1,6 @@
 """Module for processing of EMG channels."""
 
 from collections.abc import Sequence
-from typing import Optional, Union
 
 import mne
 import numpy as np
@@ -49,7 +48,7 @@ def get_emg_rms(
         mapping={name: "eeg" for name in raw_emg.ch_names}
     )
     if rereference:
-        raw_emg = mne.set_bipolar_reference(
+        raw_emg: mne.io.BaseRaw = mne.set_bipolar_reference(
             inst=raw_emg,
             anode=raw_emg.ch_names[0],
             cathode=raw_emg.ch_names[1],
@@ -78,8 +77,8 @@ def get_emg_rms(
 
     for idx, window in enumerate(window_duration):
         rms_raw = _rms_window_nb(data, window, raw.info["sfreq"])
+        # now scale to match other MISC channels
         rms_zscore = (rms_raw - np.mean(rms_raw)) / np.std(rms_raw)
-        # now scale for compatibility with other MISC channels
         data_rms[idx, :] = rms_zscore
 
     emg_ch_names = [f"EMG_RMS_{window}" for window in window_duration]
