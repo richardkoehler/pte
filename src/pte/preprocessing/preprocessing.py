@@ -10,55 +10,49 @@ import pandas as pd
 
 
 def pick_by_nm_channels(
-    raw: mne.io.BaseRaw,
-    nm_channels_dir: Path | str,
-    fname: mne_bids.BIDSPath,
+    raw: mne.io.BaseRaw, nm_channels: pd.DataFrame
 ) -> mne.io.BaseRaw:
-    """Pick channels (``used`` and ``good``) according to *nm_channels.csv."""
-    raw = raw.copy()
-    basename = str(Path(fname).stem)
-    fpath = Path(nm_channels_dir) / Path(basename + "_nm_channels.csv")
-    nm_channels: pd.DataFrame = pd.read_csv(fpath, header=0)
+    """Pick channels (``used`` == 1) according to *nm_channels.csv."""
     channel_picks = nm_channels[(nm_channels["used"] == 1)]
     if len(channel_picks) == 0:
         raise ValueError(
-            "No valid channels found in given nm_channels.csv file:"
-            f" {fpath.name}"
+            "No valid channels found in given nm_channels DataFrame."
+            "Please check the `used` column."
         )
     raw.pick(channel_picks["new_name"].to_list())
     return raw
 
 
-def bipolar_refs_from_nm_channels(
+def load_nm_channels(
     nm_channels_dir: Path | str,
     filename: Path | str | mne_bids.BIDSPath,
-    types: str | Sequence = ("ecog", "dbs", "eeg"),
-) -> tuple[list[str], list[str], list[str]]:
-    """Get referencing montage from *nm_channels.csv file."""
-    if not isinstance(types, Sequence):
-        types = (types,)
-    if isinstance(filename, mne_bids.BIDSPath):
-        # Implement this later
-        # basename = filename.copy().update(
-        # extension=None, suffix=None, datatype=None
-        # ).basename
+) -> pd.DataFrame:
+    """Load *nm_channels.csv file."""
+    if isinstance(filename, Path):
+        basename = filename.stem
+    elif isinstance(filename, mne_bids.BIDSPath):
         basename = filename.copy().update(extension=None).basename
     else:
-        basename = str(Path(filename).stem)
-    fpath = Path(nm_channels_dir) / Path(basename + "_nm_channels.csv")
+        basename = Path(filename).stem
+    fpath = Path(nm_channels_dir, f"{basename}_nm_channels.csv")
     nm_channels: pd.DataFrame = pd.read_csv(fpath, header=0)
+    return nm_channels
+
+
+def bipolar_refs_from_nm_channels(
+    nm_channels,
+) -> tuple[list[str], list[str], list[str]]:
+    """Get referencing montage from nm_channels DataFrame."""
     anodes, cathodes, ch_names = [], [], []
-    for ch_type in types:
-        df_picks = nm_channels.loc[
-            (nm_channels.type == ch_type)
-            & (nm_channels.used == 1)
-            & nm_channels.rereference.notna()
-            & (nm_channels.rereference != "None")
-            & (nm_channels.rereference != "average")
-        ]
-        anodes.extend(df_picks.name)
-        cathodes.extend(df_picks.rereference)
-        ch_names.extend(df_picks.new_name)
+    df_picks = nm_channels.loc[
+        (nm_channels.used == 1)
+        & nm_channels.rereference.notna()
+        & (nm_channels.rereference != "None")
+        & (nm_channels.rereference != "average")
+    ]
+    anodes.extend(df_picks.name)
+    cathodes.extend(df_picks.rereference)
+    ch_names.extend(df_picks.new_name)
     return anodes, cathodes, ch_names
 
 
@@ -102,9 +96,51 @@ def bandstop_filter(
     return raw
 
 
+def ref_by_nm_channels(
+    raw: mne.io.BaseRaw, nm_channels: pd.DataFrame
+) -> mne.io.BaseRaw:
+    anodes, cathodes, new_names = bipolar_refs_from_nm_channels(nm_channels)
+    if not new_names:
+        print("No channels given for bipolar re-referencing.")
+        return raw
+    # Renaming necessary to account for possible name duplications
+    curr_names = raw.ch_names
+    rename = {}
+    for i, ch in enumerate(new_names):
+        if ch in curr_names:
+            new_name = f"{ch}_new"
+            new_names[i] = new_name
+            rename[new_name] = ch
+    raw = mne.set_bipolar_reference(  # type: ignore
+        raw,
+        anode=anodes,
+        cathode=cathodes,
+        ch_name=new_names,
+        drop_refs=False,
+    )
+
+    if rename:
+        raw.drop_channels(rename.values())
+        raw.rename_channels(rename)
+
+    drop = list(set(anodes + cathodes) & set(raw.ch_names))
+    keep = nm_channels.query("used == 1 and name not in @anodes")
+    if not keep.empty:
+        keep = keep["name"].tolist()
+        drop = [ch for ch in drop if ch not in keep]
+    if drop:
+        raw.drop_channels(drop)
+
+    bads = raw.info["bads"]
+    for ch in new_names:
+        if ch in bads:
+            bads.remove(ch)
+    return raw
+
+
 def preprocess(
     raw: mne.io.BaseRaw,
-    nm_channels_dir: Path,
+    nm_channels_dir: Path | None = None,
     filename: Path | str | mne_bids.BIDSPath | None = None,
     average_ref_types: Sequence[str] | str | None = None,
     ref_nm_channels: bool = True,
@@ -116,12 +152,21 @@ def preprocess(
     pick_used_channels: bool = False,
 ) -> mne.io.BaseRaw:
     """Preprocess raw data."""
+    if pick_used_channels or ref_nm_channels:
+        if nm_channels_dir is None:
+            raise ValueError("`nm_channels_dir` must be provided.")
+    if nm_channels_dir:
+        if filename is None:
+            if not raw.filenames:
+                raise ValueError(
+                    "If `filename` is not provided, `raw` must have a"
+                    " `filenames` attribute."
+                )
+            filename = raw.filenames[0]
+        nm_channels = load_nm_channels(nm_channels_dir, filename)
+
     if notch_filter == "auto":
         notch_filter = raw.info["line_freq"]
-    if filename is None:
-        filename = raw.filenames[0]
-    if isinstance(filename, Path):
-        filename = str(filename)
 
     # raw.pick(picks=["ecog", "dbs"], verbose=False)
     if not raw.preload:
@@ -145,26 +190,23 @@ def preprocess(
             )
 
     if ref_nm_channels:
-        anodes, cathodes, ch_names = bipolar_refs_from_nm_channels(
-            nm_channels_dir=nm_channels_dir, filename=filename
-        )
-        if not ch_names:
-            print("No channels given for bipolar re-referencing.")
-        else:
-            # Renaming necessary to account for possible name duplications
-            # anodes_map = {anode: f"{anode}_old" for anode in anodes}
-            # raw.rename_channels(anodes_map)
-            raw = mne.set_bipolar_reference(  # type: ignore
-                raw,
-                anode=anodes,  # list(anodes_map.values()),
-                cathode=cathodes,
-                ch_name=ch_names,
-                drop_refs=True,
-            )
-            bads = raw.info["bads"]
-            for ch in ch_names:
-                if ch in bads:
-                    bads.remove(ch)
+        raw = ref_by_nm_channels(raw=raw, nm_channels=nm_channels)
+
+    if nm_channels_dir:
+        names = nm_channels.query("used == 1 or target == 1")
+        names = names[["name", "new_name"]].dropna()
+        old_names = names["name"].to_list()
+        new_names = names["new_name"].to_list()
+        curr_names = raw.ch_names
+        rename_map = {
+            old: new
+            for old, new in zip(old_names, new_names)
+            if old in curr_names
+        }
+        raw.rename_channels(rename_map)
+
+    if pick_used_channels:
+        raw = pick_by_nm_channels(raw=raw, nm_channels=nm_channels)
 
     if resample_freq is not None:
         raw.resample(sfreq=resample_freq, verbose=True)
@@ -180,11 +222,6 @@ def preprocess(
             raw.notch_filter(notch_freqs, verbose=True)
 
     raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
-
-    if pick_used_channels:
-        raw = pick_by_nm_channels(
-            raw=raw, nm_channels_dir=nm_channels_dir, fname=filename
-        )
 
     raw.reorder_channels(sorted(raw.ch_names))
     return raw
