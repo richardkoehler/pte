@@ -36,8 +36,8 @@ dependencies = [
   "pybv",
   "scikit-image",
   "scipy",
-  "mne_qt_browser",
-  "pyqt5"
+  "mne-qt-browser",
+  "pyqt5",
 ]
 
 [project.optional-dependencies]

@@ -39,23 +39,6 @@ def load_nm_channels(
     return nm_channels
 
 
-def bipolar_refs_from_nm_channels(
-    nm_channels,
-) -> tuple[list[str], list[str], list[str]]:
-    """Get referencing montage from nm_channels DataFrame."""
-    anodes, cathodes, ch_names = [], [], []
-    df_picks = nm_channels.loc[
-        (nm_channels.used == 1)
-        & nm_channels.rereference.notna()
-        & (nm_channels.rereference != "None")
-        & (nm_channels.rereference != "average")
-    ]
-    anodes.extend(df_picks.name)
-    cathodes.extend(df_picks.rereference)
-    ch_names.extend(df_picks.new_name)
-    return anodes, cathodes, ch_names
-
-
 def bandstop_filter(
     raw: mne.io.BaseRaw,
     bandstop_freq: str | int | float | np.ndarray | None = "auto",
@@ -94,6 +77,23 @@ def bandstop_filter(
         )
 
     return raw
+
+
+def bipolar_refs_from_nm_channels(
+    nm_channels,
+) -> tuple[list[str], list[str], list[str]]:
+    """Get referencing montage from nm_channels DataFrame."""
+    anodes, cathodes, ch_names = [], [], []
+    df_picks = nm_channels.loc[
+        (nm_channels.used == 1)
+        & nm_channels.rereference.notna()
+        & (nm_channels.rereference != "None")
+        & (nm_channels.rereference != "average")
+    ]
+    anodes.extend(df_picks.name)
+    cathodes.extend(df_picks.rereference)
+    ch_names.extend(df_picks.new_name)
+    return anodes, cathodes, ch_names
 
 
 def ref_by_nm_channels(
