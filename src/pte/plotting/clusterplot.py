@@ -11,10 +11,12 @@ def clusterplot_combined(
     power_a: np.ndarray,
     power_b: np.ndarray | int | float,
     extent: tuple | list,
-    label: str = "Power[AU]",
     alpha: float = 0.05,
     n_perm: int = 100,
+    fig: matplotlib.figure.Figure | None = None,
     title: str | None = None,
+    label_cbar: str = "Power [AU]",
+    yscale: str = "log",
     borderval_cbar: str | int | float = "auto",
     outpath: Path | str | None = None,
     show: bool = True,
@@ -35,9 +37,23 @@ def clusterplot_combined(
             )
         borderval_cbar = min(power_av.max(), np.abs(power_av.min()))
 
-    fig, axs = plt.subplots(
-        nrows=1, ncols=3, figsize=(12, 3.6), sharex=True, sharey=True
-    )
+    if not fig:
+        fig, axs = plt.subplots(
+            nrows=1,
+            ncols=3,
+            figsize=(8, 2.4),
+            sharex=True,
+            sharey=True,
+        )
+    else:
+        axs = fig.axes
+    axs[0].set_ylabel("Frequency [Hz]")
+    axs[0].set_xlabel("Time [s]")
+    # if yscale:  #  != "lin":
+    #     for ax in axs:
+    #         ax.set_yticks([2, 10, 100, 1000])
+    #         # ax.semilogy()
+    #         # ax.set_yscale("linear")
     # Plot averaged power
     pos_0 = axs[0].imshow(
         power_av,
@@ -48,7 +64,7 @@ def clusterplot_combined(
         vmin=borderval_cbar * -1,
         vmax=borderval_cbar,
     )
-    fig.colorbar(pos_0, ax=axs[0], label=label)
+    fig.colorbar(pos_0, ax=axs[0], label=label_cbar)
 
     p_values, _, cluster_arr = pte_stats.cluster_analysis_2d(
         data_a=power_a,
@@ -58,9 +74,23 @@ def clusterplot_combined(
         only_max_cluster=False,
         n_jobs=n_jobs,
     )
+    # Get 2D clusters
+    # p_values = pte_stats.permutation_2d(
+    #     data_a=power_a,
+    #     data_b=power_b,
+    #     n_perm=n_perm,
+    #     two_tailed=True,
+    # )
+    # cluster_arr, n_clusters = pte_stats.clusters_from_pvals(
+    #     p_values,
+    #     alpha=alpha,
+    #     correction_method="fdr",
+    #     n_perm=n_perm,
+    #     min_cluster_size=1,
+    # )
 
     # Plot p-values
-    print(f"{p_values.min() = }")
+    # p_values_masked = np.ma.masked_where(alpha < p_values, p_values)
     pos_1 = axs[1].imshow(
         p_values,
         extent=extent,
@@ -68,6 +98,13 @@ def clusterplot_combined(
         cmap="viridis_r",
         aspect="auto",
         origin="lower",
+    )
+    axs[1].contour(
+        p_values,
+        levels=[alpha],
+        extent=extent,
+        origin="lower",
+        colors="black",
     )
     fig.colorbar(pos_1, ax=axs[1], label="P [log]")
 
@@ -84,16 +121,29 @@ def clusterplot_combined(
         cmap="binary",
         aspect="auto",
         origin="lower",
+        vmin=0,
+        vmax=1,
     )
     cbar = fig.colorbar(
         pos_2, ax=axs[2], label=f"Signif. Clusters [P≤{alpha}]"
     )
     cbar.ax.set_yticks([0, 1])
 
+    if np.any(squared):
+        axs[0].contour(
+            squared,
+            levels=[0.9],
+            extent=extent,
+            origin="lower",
+            colors="black",
+        )
+
     fig.suptitle(title)
     fig.tight_layout()
     if outpath:
-        fig.savefig(outpath, dpi=450)
+        fig.savefig(outpath)
     if show:
         plt.show()
+    else:
+        plt.close()
     return fig

@@ -121,6 +121,7 @@ def apply_baseline(
 #       contributors may be used to endorse or promote products derived from
 #       this software without specific prior written permission.
 
+
 # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
 # AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
 # IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
@@ -353,15 +354,17 @@ def morlet_from_epochs(
         upper_freq = min(epochs.info["sfreq"] / 2, 200.0)
         freqs = np.arange(1.0, upper_freq)
 
-    if isinstance(decim_power, str):
-        if decim_power != "auto":
-            raise ValueError(
-                "If decim_power is a string, it must be `auto`. Got:"
-                f" {decim_power}"
-            )
-        decim = int(epochs.info["sfreq"] / 100)
-    else:
-        decim = decim_power
+    if "decim" not in kwargs:
+        if isinstance(decim_power, str):
+            if decim_power != "auto":
+                raise ValueError(
+                    "If decim_power is a string, it must be `auto`. Got:"
+                    f" {decim_power}"
+                )
+            decim = int(epochs.info["sfreq"] / 100)
+        else:
+            decim = decim_power
+        kwargs["decim"] = decim
 
     power = mne.time_frequency.tfr_morlet(
         inst=epochs,
@@ -372,7 +375,6 @@ def morlet_from_epochs(
         average=average,
         return_itc=False,
         verbose=True,
-        decim=decim,
         **kwargs,
     )
     return power
@@ -475,11 +477,11 @@ def power_from_bids(
     kwargs_preprocess: dict | None = None,
     kwargs_epochs: dict | None = None,
     kwargs_power: dict | None = None,
+    verbose: bool | str = False,
 ) -> mne.time_frequency.AverageTFR | mne.time_frequency.EpochsTFR | None:
     """Calculate power from single file."""
     print(f"File: {bids_path.basename}")
-    raw = mne_bids.read_raw_bids(bids_path, verbose=False)
-
+    raw = mne_bids.read_raw_bids(bids_path, verbose=verbose)
     try:
         if kwargs_preprocess is None:
             kwargs_preprocess = {}
@@ -539,5 +541,5 @@ def power_from_bids(
 
     if out_dir:
         fname = Path(out_dir) / (str(bids_path.fpath.stem) + "_tfr.h5")
-        power.save(fname=fname, verbose=True, overwrite=True)
+        power.save(fname=fname, verbose=verbose, overwrite=True)
     return power
