@@ -1,5 +1,5 @@
 """Module for preprocessing functions (resampling, referencing, etc.)"""
-from collections.abc import Sequence
+from typing import Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -39,43 +39,42 @@ def load_nm_channels(
     return nm_channels
 
 
-def bandstop_filter(
+def stim_filter(
     raw: mne.io.BaseRaw,
-    bandstop_freq: str | int | float | np.ndarray | None = "auto",
+    stim_freq: str | int | float | np.ndarray | None = "auto",
     fname: str | None = None,
+    verbose: bool = False,
 ) -> mne.io.BaseRaw:
     """Bandstop filter Raw data"""
-    if bandstop_freq is None:
+    if stim_freq is None:
         return raw
 
-    if isinstance(bandstop_freq, str):
-        if bandstop_freq != "auto":
+    if isinstance(stim_freq, str):
+        if stim_freq != "auto":
             raise ValueError(
-                "`bandstop_freq` must be one of either `string`"
-                f"`float`, `'auto'` or `None`. Got: {bandstop_freq}."
+                "`stim_freq` must be one of either `int`"
+                f"`float`, `'auto'` or `None`. Got: {stim_freq}."
             )
         if not isinstance(fname, str):
             try:
                 fname = raw.filenames[0]
             except ValueError as error:
                 raise ValueError(
-                    "If `bandstop_freq` is `'auto'`, `fname` must be provided."
+                    "If `stim_freq` is `'auto'`, `fname` must be provided."
                 ) from error
         if "StimOn" not in fname:
             return raw
-        bandstop_freq = 130
+        stim_freq = 130
 
-    if isinstance(bandstop_freq, (int, float)):
-        bandstop_freq = np.arange(
-            bandstop_freq, raw.info["sfreq"] / 2, bandstop_freq
+    if isinstance(stim_freq, (int, float)):
+        stim_freq = np.arange(
+            stim_freq, raw.info["sfreq"] // 2 -1, stim_freq
         )
 
-    if bandstop_freq:
-        print("FREQUENCIES:", bandstop_freq)
-        raw = raw.notch_filter(
-            bandstop_freq, notch_widths=bandstop_freq * 0.2, verbose=True
-        )
-
+    notch_widths = (stim_freq * 0.2).clip(max=26)
+    raw = raw.notch_filter(
+        stim_freq, notch_widths=notch_widths, verbose=verbose
+    )
     return raw
 
 
@@ -148,8 +147,9 @@ def preprocess(
     resample_freq: int | float | None = 500,
     high_pass: int | float | None = None,
     low_pass: int | float | None = None,
-    bandstop_freq: str | int | float | np.ndarray | None = "auto",
+    stim_freq: str | int | float | np.ndarray | None = "auto",
     pick_used_channels: bool = False,
+    verbose:bool = True
 ) -> mne.io.BaseRaw:
     """Preprocess raw data."""
     if pick_used_channels or ref_nm_channels:
@@ -168,7 +168,6 @@ def preprocess(
     if notch_filter == "auto":
         notch_filter = raw.info["line_freq"]
 
-    # raw.pick(picks=["ecog", "dbs"], verbose=False)
     if not raw.preload:
         raw.load_data(verbose=True)
 
@@ -177,7 +176,7 @@ def preprocess(
             average_ref_types = [average_ref_types]
         for pick_type in average_ref_types:
             raw.set_eeg_reference(
-                ref_channels="average", ch_type=pick_type, verbose=True
+                ref_channels="average", ch_type=pick_type, verbose=verbose
             )
             raw.rename_channels(
                 {
@@ -209,19 +208,19 @@ def preprocess(
         raw = pick_by_nm_channels(raw=raw, nm_channels=nm_channels)
 
     if resample_freq is not None:
-        raw.resample(sfreq=resample_freq, verbose=True)
+        raw.resample(sfreq=resample_freq, verbose=verbose)
 
     if high_pass is not None or low_pass is not None:
-        raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=True)
+        raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=verbose)
 
     if notch_filter is not None:
         notch_freqs = np.arange(
             notch_filter, raw.info["sfreq"] / 2, notch_filter
         )
         if notch_freqs.size > 0:
-            raw.notch_filter(notch_freqs, verbose=True)
+            raw.notch_filter(notch_freqs, verbose=verbose)
 
-    raw = bandstop_filter(raw=raw, bandstop_freq=bandstop_freq)
+    raw = stim_filter(raw=raw, stim_freq=stim_freq, verbose=verbose)
 
     raw.reorder_channels(sorted(raw.ch_names))
     return raw

@@ -490,6 +490,7 @@ def power_from_bids(
             nm_channels_dir=nm_channels_dir,
             filename=bids_path,
             pick_used_channels=True,
+            verbose=verbose,
             **kwargs_preprocess,
         )
     except ValueError as error:
