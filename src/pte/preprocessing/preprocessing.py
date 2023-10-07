@@ -220,7 +220,7 @@ def preprocess(
         if notch_freqs.size > 0:
             raw.notch_filter(notch_freqs, verbose=verbose)
 
-    if stim_freq:
+    if stim_freq is not None:
         raw = stim_filter(raw=raw, stim_freq=stim_freq, verbose=verbose)
 
     raw.reorder_channels(sorted(raw.ch_names))
