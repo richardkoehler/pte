@@ -15,9 +15,10 @@ def clusterplot_combined(
     n_perm: int = 100,
     fig: matplotlib.figure.Figure | None = None,
     title: str | None = None,
-    label_cbar: str = "Power [AU]",
-    yscale: str = "log",
-    borderval_cbar: str | int | float = "auto",
+    x_label: str = "Time [s]",
+    y_label: str = "Frequency [Hz]",
+    cbar_label: str = "Power [AU]",
+    cbar_borderval: str | int | float = "auto",
     outpath: Path | str | None = None,
     show: bool = True,
     n_jobs: int = 1,
@@ -29,13 +30,13 @@ def clusterplot_combined(
     else:
         power_av = power_b.mean(axis=0) - power_a.mean(axis=0)
 
-    if isinstance(borderval_cbar, str):
-        if borderval_cbar != "auto":
+    if isinstance(cbar_borderval, str):
+        if cbar_borderval != "auto":
             raise ValueError(
-                "`border_val` must be either an int, float or"
-                f" 'auto'. Got: {borderval_cbar}."
+                "`cbar_borderval` must be either an int, float or"
+                f" 'auto'. Got: {cbar_borderval}."
             )
-        borderval_cbar = min(power_av.max(), np.abs(power_av.min()))
+        cbar_borderval = min(power_av.max(), np.abs(power_av.min()))
 
     if not fig:
         fig, axs = plt.subplots(
@@ -47,8 +48,8 @@ def clusterplot_combined(
         )
     else:
         axs = fig.axes
-    axs[0].set_ylabel("Frequency [Hz]")
-    axs[0].set_xlabel("Time [s]")
+    axs[0].set_ylabel(y_label)
+    axs[0].set_xlabel(x_label)
     # if yscale:  #  != "lin":
     #     for ax in axs:
     #         ax.set_yticks([2, 10, 100, 1000])
@@ -61,10 +62,10 @@ def clusterplot_combined(
         cmap="viridis",
         aspect="auto",
         origin="lower",
-        vmin=borderval_cbar * -1,
-        vmax=borderval_cbar,
+        vmin=cbar_borderval * -1,
+        vmax=cbar_borderval,
     )
-    fig.colorbar(pos_0, ax=axs[0], label=label_cbar)
+    fig.colorbar(pos_0, ax=axs[0], label=cbar_label)
 
     p_values, _, cluster_arr = pte_stats.cluster_analysis_2d(
         data_a=power_a,
