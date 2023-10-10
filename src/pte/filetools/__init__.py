@@ -7,5 +7,5 @@ from .bids import (
     sub_med_stim_from_fname,
 )
 from .events import get_bad_epochs
-from .filefinder import get_filefinder
+from .filefinder import get_filefinder, DefaultFinder, BIDSFinder
 from .matlab import loadmat

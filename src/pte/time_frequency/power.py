@@ -460,9 +460,10 @@ def discard_epochs(
     else:
         events = events_begin[:, 0]
         event_diffs = np.diff(events)
-    drop_indices = np.where(
+    dist_small = np.where(
         event_diffs <= min_distance_events * epochs.info["sfreq"]
-    )[0] + 1
+    )[0]
+    drop_indices = np.unique(np.concatenate((dist_small, dist_small + 1)))
     if not inplace:
         epochs = epochs.copy()
     return epochs.drop(indices=drop_indices, reason="min_distance_events")

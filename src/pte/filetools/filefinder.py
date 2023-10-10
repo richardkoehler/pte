@@ -310,7 +310,7 @@ class BIDSFinder(FileFinder):
 
     def find_files(
         self,
-        directory: str,
+        directory: Path | str,
         extensions: Sequence | str | None = (".vhdr", ".edf"),
         keywords: list | None = None,
         hemisphere: str | None = None,
