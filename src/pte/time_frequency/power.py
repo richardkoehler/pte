@@ -451,6 +451,7 @@ def discard_epochs(
     events_begin: np.ndarray,
     min_distance_events: int | float,
     events_end: np.ndarray | None = None,
+    inplace: bool = True
 ) -> mne.Epochs:
     """Discard epochs based on minimal distance between event onset and end."""
     if events_end is not None:
@@ -462,8 +463,9 @@ def discard_epochs(
     drop_indices = np.where(
         event_diffs <= min_distance_events * epochs.info["sfreq"]
     )[0] + 1
-    epochs = epochs.drop(indices=drop_indices)
-    return epochs
+    if not inplace:
+        epochs = epochs.copy()
+    return epochs.drop(indices=drop_indices, reason="min_distance_events")
 
 
 def power_from_bids(
