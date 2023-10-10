@@ -461,7 +461,7 @@ def discard_epochs(
         event_diffs = np.diff(events)
     drop_indices = np.where(
         event_diffs <= min_distance_events * epochs.info["sfreq"]
-    )[0]
+    )[0] + 1
     epochs = epochs.drop(indices=drop_indices)
     return epochs
 

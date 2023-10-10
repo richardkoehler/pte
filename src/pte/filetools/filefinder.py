@@ -4,7 +4,7 @@ import os
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Literal, Sequence
 
 import mne_bids
 
@@ -177,32 +177,6 @@ class FileFinder(ABC):
                     matching_files.append(file)
             filtered_files = matching_files
         self.files = filtered_files
-
-
-def get_filefinder(
-    datatype: str, hemispheres: dict | None = None, **kwargs
-) -> FileFinder:
-    """Create and return FileFinder of desired type.
-
-    Parameters
-    ----------
-    datatype : str
-        Allowed values for `datatype`: ["any", "bids"].
-
-    Returns
-    -------
-    FileFinder
-        Instance of FileFinder for reading given `datatype`.
-    """
-    finders = {
-        "any": DefaultFinder,
-        "bids": BIDSFinder,
-    }
-    datatype = datatype.lower()
-    if datatype not in finders:
-        raise FinderNotFoundError(datatype, finders)
-
-    return finders[datatype](hemispheres=hemispheres, **kwargs)
 
 
 class DirectoryNotFoundError(Exception):
@@ -438,3 +412,28 @@ class FinderNotFoundError(Exception):
             f"{self.message} Allowed values: {self.finders}."
             f" Got: {self.datatype}."
         )
+
+def get_filefinder(
+    datatype: Literal["any", "bids"], hemispheres: dict | None = None, **kwargs
+) -> DefaultFinder | BIDSFinder:
+    """Create and return FileFinder of desired type.
+
+    Parameters
+    ----------
+    datatype : str
+        Allowed values for `datatype`: ["any", "bids"].
+
+    Returns
+    -------
+    FileFinder
+        Instance of FileFinder for reading given `datatype`.
+    """
+    finders = {
+        "any": DefaultFinder,
+        "bids": BIDSFinder,
+    }
+    datatype = datatype.lower()
+    if datatype not in finders:
+        raise FinderNotFoundError(datatype, finders)
+
+    return finders[datatype](hemispheres=hemispheres, **kwargs)

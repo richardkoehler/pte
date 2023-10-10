@@ -149,6 +149,7 @@ def preprocess(
     low_pass: int | float | None = None,
     stim_freq: str | int | float | np.ndarray | None = "auto",
     pick_used_channels: bool = False,
+    sort_channels: bool = True,
     verbose:bool = True
 ) -> mne.io.BaseRaw:
     """Preprocess raw data."""
@@ -188,7 +189,7 @@ def preprocess(
                 }
             )
 
-    if ref_nm_channels:
+    if ref_nm_channels and nm_channels_dir:
         raw = ref_by_nm_channels(raw=raw, nm_channels=nm_channels)
 
     if nm_channels_dir:
@@ -223,5 +224,6 @@ def preprocess(
     if stim_freq is not None:
         raw = stim_filter(raw=raw, stim_freq=stim_freq, verbose=verbose)
 
-    raw.reorder_channels(sorted(raw.ch_names))
+    if sort_channels:
+        raw.reorder_channels(sorted(raw.ch_names))
     return raw
