@@ -388,6 +388,7 @@ def epochs_from_raw(
     events_trial_onset: str | list[str | tuple[str, str]] | None = None,
     events_trial_end: str | list[str | tuple[str, str]] | None = None,
     min_distance_trials: int | float = 0,
+    verbose: bool = True,
     **kwargs,
 ) -> mne.Epochs:
     """Return epochs from given events."""
@@ -398,7 +399,7 @@ def epochs_from_raw(
         tmin=tmin,
         tmax=tmax,
         baseline=baseline,
-        verbose=True,
+        verbose=verbose,
         **kwargs,
     )
     if min_distance_trials:
@@ -451,7 +452,7 @@ def discard_epochs(
     events_begin: np.ndarray,
     min_distance_events: int | float,
     events_end: np.ndarray | None = None,
-    inplace: bool = True
+    inplace: bool = True,
 ) -> mne.Epochs:
     """Discard epochs based on minimal distance between event onset and end."""
     if events_end is not None:

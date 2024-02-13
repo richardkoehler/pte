@@ -15,9 +15,6 @@ class FileFinder(ABC):
 
     hemispheres: dict[str, str] | None = field(default_factory=dict)
     directory: Path | str = field(init=False)
-    files: list[str] | list[mne_bids.BIDSPath] = field(
-        init=False, default_factory=list
-    )
 
     def __str__(self) -> str:
         if not self.files:
@@ -30,8 +27,7 @@ class FileFinder(ABC):
             (
                 "Corresponding files found:",
                 "".join(
-                    f"{{:>{len(header) + 2}}}".format(header)
-                    for header in headers
+                    f"{{:>{len(header) + 2}}}".format(header) for header in headers
                 ),
                 terminal_size,
                 *(
@@ -74,9 +70,7 @@ class FileFinder(ABC):
         """Filter list of filepaths for given parameters."""
 
     @staticmethod
-    def _keyword_search(
-        files: list[str], keywords: str | Sequence[str] | None
-    ) -> list:
+    def _keyword_search(files: list[str], keywords: str | Sequence[str] | None) -> list:
         if not keywords:
             return files
         if isinstance(keywords, str):
@@ -161,19 +155,12 @@ class FileFinder(ABC):
                 assert (
                     self.hemispheres is not None
                 ), "self.hemispheres must be specified."
-                if (
-                    subject not in self.hemispheres
-                    or self.hemispheres[subject] is None
-                ):
-                    raise HemisphereNotSpecifiedError(
-                        subject, self.hemispheres
-                    )
+                if subject not in self.hemispheres or self.hemispheres[subject] is None:
+                    raise HemisphereNotSpecifiedError(subject, self.hemispheres)
                 hem_sub: str = self.hemispheres[subject]
                 if hemisphere == "ipsilateral" and task.endswith(hem_sub):
                     matching_files.append(file)
-                if hemisphere == "contralateral" and not task.endswith(
-                    hem_sub
-                ):
+                if hemisphere == "contralateral" and not task.endswith(hem_sub):
                     matching_files.append(file)
             filtered_files = matching_files
         self.files = filtered_files
@@ -235,6 +222,8 @@ class HemisphereNotSpecifiedError(Exception):
 @dataclass
 class DefaultFinder(FileFinder):
     """Class for finding and handling any type of file."""
+
+    files: list[str] = field(init=False, default_factory=list)
 
     def __iter__(self):
         self._n = 0
@@ -307,6 +296,7 @@ class BIDSFinder(FileFinder):
     """Class for finding and handling data files in BIDS-compliant format."""
 
     bids_root: str = field(init=False)
+    files: list[mne_bids.BIDSPath] = field(init=False, default_factory=list)
 
     def find_files(
         self,
@@ -364,10 +354,7 @@ class BIDSFinder(FileFinder):
         if verbose:
             print(self)
 
-    def _make_bids_paths(
-        self, filepaths: list[str]
-    ) -> list[mne_bids.BIDSPath]:
-
+    def _make_bids_paths(self, filepaths: list[str]) -> list[mne_bids.BIDSPath]:
         """Create list of mne-bids BIDSPath objects from list of filepaths."""
         bids_paths = []
         for filepath in filepaths:
@@ -409,9 +396,9 @@ class FinderNotFoundError(Exception):
 
     def __str__(self) -> str:
         return (
-            f"{self.message} Allowed values: {self.finders}."
-            f" Got: {self.datatype}."
+            f"{self.message} Allowed values: {self.finders}." f" Got: {self.datatype}."
         )
+
 
 def get_filefinder(
     datatype: Literal["any", "bids"], hemispheres: dict | None = None, **kwargs
