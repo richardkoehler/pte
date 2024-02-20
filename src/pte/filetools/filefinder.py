@@ -1,10 +1,12 @@
 """Find and filter files. Supports BIDSPath objects from `mne-bids`."""
-from abc import ABC, abstractmethod
+
 import os
 import shutil
+from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal, Sequence
+from typing import Any, Literal
 
 import mne_bids
 
@@ -13,7 +15,7 @@ import mne_bids
 class FileFinder(ABC):
     """Basic representation of class for finding and filtering files."""
 
-    hemispheres: dict[str, str] | None = field(default_factory=dict)
+    hemispheres: dict[str, str] | None = field(default_factory=dict[str, str])
     directory: Path | str = field(init=False)
 
     def __str__(self) -> str:
@@ -27,7 +29,8 @@ class FileFinder(ABC):
             (
                 "Corresponding files found:",
                 "".join(
-                    f"{{:>{len(header) + 2}}}".format(header) for header in headers
+                    f"{{:>{len(header) + 2}}}".format(header)
+                    for header in headers
                 ),
                 terminal_size,
                 *(
@@ -52,7 +55,7 @@ class FileFinder(ABC):
         stimulation: str | None = None,
         medication: str | None = None,
         exclude: str | Sequence[str] | None = None,
-        verbose: bool = False,
+        verbose: bool | str | int | None = False,
     ) -> None:
         """Find files in directory with optional
         keywords and extensions."""
@@ -65,12 +68,14 @@ class FileFinder(ABC):
         stimulation: str | None = None,
         medication: str | None = None,
         exclude: str | Sequence[str] | None = None,
-        verbose: bool = False,
+        verbose: bool | str | int | None = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
 
     @staticmethod
-    def _keyword_search(files: list[str], keywords: str | Sequence[str] | None) -> list:
+    def _keyword_search(
+        files: list[str], keywords: str | Sequence[str] | None
+    ) -> list:
         if not keywords:
             return files
         if isinstance(keywords, str):
@@ -155,12 +160,19 @@ class FileFinder(ABC):
                 assert (
                     self.hemispheres is not None
                 ), "self.hemispheres must be specified."
-                if subject not in self.hemispheres or self.hemispheres[subject] is None:
-                    raise HemisphereNotSpecifiedError(subject, self.hemispheres)
+                if (
+                    subject not in self.hemispheres
+                    or self.hemispheres[subject] is None
+                ):
+                    raise HemisphereNotSpecifiedError(
+                        subject, self.hemispheres
+                    )
                 hem_sub: str = self.hemispheres[subject]
                 if hemisphere == "ipsilateral" and task.endswith(hem_sub):
                     matching_files.append(file)
-                if hemisphere == "contralateral" and not task.endswith(hem_sub):
+                if hemisphere == "contralateral" and not task.endswith(
+                    hem_sub
+                ):
                     matching_files.append(file)
             filtered_files = matching_files
         self.files = filtered_files
@@ -239,13 +251,13 @@ class DefaultFinder(FileFinder):
     def find_files(
         self,
         directory: Path | str,
-        extensions: Sequence | str | None = None,
-        keywords: list[str] | str | None = None,
+        extensions: str | Sequence | None = None,
+        keywords: str | Sequence[str] | None = None,
         hemisphere: str | None = None,
         stimulation: str | None = None,
         medication: str | None = None,
-        exclude: str | None = None,
-        verbose: bool = False,
+        exclude: str | Sequence[str] | None = None,
+        verbose: bool | str | int | None = False,
     ) -> None:
         """Find files in directory with optional
         keywords and extensions.
@@ -272,12 +284,12 @@ class DefaultFinder(FileFinder):
 
     def filter_files(
         self,
-        keywords: list | None = None,
+        keywords: str | Sequence[str] | None = None,
         hemisphere: str | None = None,
         stimulation: str | None = None,
         medication: str | None = None,
-        exclude: str | None = None,
-        verbose: bool = False,
+        exclude: str | Sequence[str] | None = None,
+        verbose: bool | str | int | None = False,
     ) -> None:
         """Filter filepaths for given parameters and return filtered list."""
         self._filter_files(
@@ -301,13 +313,13 @@ class BIDSFinder(FileFinder):
     def find_files(
         self,
         directory: Path | str,
-        extensions: Sequence | str | None = (".vhdr", ".edf"),
-        keywords: list | None = None,
+        extensions: str | Sequence | None = (".vhdr", ".edf"),
+        keywords: str | Sequence[str] | None = None,
         hemisphere: str | None = None,
         stimulation: str | None = None,
         medication: str | None = None,
-        exclude: str | None = None,
-        verbose: bool = False,
+        exclude: str | Sequence[str] | None = None,
+        verbose: bool | str | int | None = False,
     ) -> None:
         """Find files in directory with optional keywords and extensions.
 
@@ -334,12 +346,12 @@ class BIDSFinder(FileFinder):
 
     def filter_files(
         self,
-        keywords: list | None = None,
+        keywords: str | Sequence[str] | None = None,
         hemisphere: str | None = None,
         stimulation: str | None = None,
         medication: str | None = None,
-        exclude: str | None = None,
-        verbose: bool = False,
+        exclude: str | Sequence[str] | None = None,
+        verbose: bool | str | int | None = False,
     ) -> None:
         """Filter list of filepaths for given parameters."""
         self.files = [str(file.fpath.resolve()) for file in self.files]
@@ -354,7 +366,9 @@ class BIDSFinder(FileFinder):
         if verbose:
             print(self)
 
-    def _make_bids_paths(self, filepaths: list[str]) -> list[mne_bids.BIDSPath]:
+    def _make_bids_paths(
+        self, filepaths: list[str]
+    ) -> list[mne_bids.BIDSPath]:
         """Create list of mne-bids BIDSPath objects from list of filepaths."""
         bids_paths = []
         for filepath in filepaths:
@@ -396,13 +410,14 @@ class FinderNotFoundError(Exception):
 
     def __str__(self) -> str:
         return (
-            f"{self.message} Allowed values: {self.finders}." f" Got: {self.datatype}."
+            f"{self.message} Allowed values: {self.finders}."
+            f" Got: {self.datatype}."
         )
 
 
 def get_filefinder(
     datatype: Literal["any", "bids"], hemispheres: dict | None = None, **kwargs
-) -> DefaultFinder | BIDSFinder:
+) -> FileFinder:
     """Create and return FileFinder of desired type.
 
     Parameters
@@ -419,7 +434,6 @@ def get_filefinder(
         "any": DefaultFinder,
         "bids": BIDSFinder,
     }
-    datatype = datatype.lower()
     if datatype not in finders:
         raise FinderNotFoundError(datatype, finders)
 

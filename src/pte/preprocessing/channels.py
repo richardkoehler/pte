@@ -42,7 +42,7 @@ def add_emg_rms(
         raw=raw.copy(),
         emg_ch=ch_name,
         window_duration=[window_duration],
-        analog_ch=analog_channel,
+        analog_channel=analog_channel,
         rereference=False,
     )
 
@@ -113,7 +113,7 @@ def add_squared_channel(
 
 def summation_channel_name(summation_channels: Sequence[str]) -> str:
     """Create channel name for summation montage from given channels."""
-    base_items = None
+    base_items: list[str] = []
     channel_numbers = []
     for ch_name in summation_channels:
         items = ch_name.split("_")
@@ -132,10 +132,10 @@ def bipolar_channel_name(channels: Sequence[str]) -> str:
         raise ValueError(
             "Length of `channels` must be 2. Got:" f"{len(channels)}."
         )
-    base_items = None
+    base_items: list[str] = []
     channel_numbers = []
     for ch_name in channels:
-        items = ch_name.split("_")
+        items: list[str] = ch_name.split("_")
         channel_numbers.append(items.pop(2))
         if not base_items:
             base_items = items

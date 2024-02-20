@@ -1,12 +1,14 @@
 """Module for plotting clusters."""
+
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Literal, Sequence
+from typing import Literal
 
 import matplotlib.figure
-from matplotlib import pyplot as plt
 import numpy as np
 import pte_stats
 import scipy.stats
+from matplotlib import pyplot as plt
 
 
 def clusterplot_correlation(
@@ -20,8 +22,8 @@ def clusterplot_correlation(
     x_label: str = "Time [s]",
     y_label: str = "Frequency [Hz]",
     cbar_label: str = "Power [AU]",
-    cbar_borderval: str | int | float = "auto",
-    cbar_borderval_corr: str | int | float = "auto",
+    cbar_borderval: Literal["auto"] | int | float = "auto",
+    cbar_borderval_corr: Literal["auto"] | int | float = "auto",
     outpath: Path | str | None = None,
     show: bool = True,
     n_jobs: int = 1,
@@ -35,7 +37,7 @@ def clusterplot_correlation(
                 "`cbar_borderval` must be either an int, float or"
                 f" 'auto'. Got: {cbar_borderval}."
             )
-        cbar_borderval: float = min(data_av.max(), np.abs(data_av.min()))
+        cbar_borderval = min(data_av.max(), np.abs(data_av.min()))
 
     if not fig:
         fig, axs = plt.subplots(
@@ -97,10 +99,13 @@ def clusterplot_correlation(
     )
     fig.colorbar(pos_0, ax=axs[0], label=cbar_label)
 
-    if cbar_borderval_corr == "auto":
-        cbar_borderval_corr: float = min(
-            corr_vals.max(), np.abs(corr_vals.min())
-        )
+    if isinstance(cbar_borderval_corr, str):
+        if cbar_borderval_corr != "auto":
+            raise ValueError(
+                "`cbar_borderval_corr` must be either an int, float or"
+                f" 'auto'. Got: {cbar_borderval_corr}."
+            )
+        cbar_borderval_corr = min(corr_vals.max(), np.abs(corr_vals.min()))
     corr_vals_masked = np.ma.masked_where(np.logical_not(squared), corr_vals)
     pos_1 = axs[1].imshow(
         corr_vals_masked,
@@ -109,7 +114,7 @@ def clusterplot_correlation(
         aspect="auto",
         origin="lower",
         vmax=cbar_borderval_corr,
-        vmin=-cbar_borderval_corr,
+        vmin=-cbar_borderval_corr,  # type: ignore[operator]
     )
     fig.colorbar(pos_1, ax=axs[1], label="Spearman's ρ")
 
@@ -160,7 +165,7 @@ def clusterplot_combined(
 ) -> matplotlib.figure.Figure:
     """Plot power, p-values and significant clusters."""
 
-    if isinstance(power_b, (int, float)):
+    if isinstance(power_b, int | float):
         power_av = power_a.mean(axis=0)
     else:
         power_av = power_b.mean(axis=0) - power_a.mean(axis=0)
@@ -174,10 +179,7 @@ def clusterplot_combined(
         cbar_borderval = min(power_av.max(), np.abs(power_av.min()))
 
     if not fig:
-        if plot_pvals:
-            ncols = 3
-        else:
-            ncols = 1
+        ncols = 3 if plot_pvals else 1
         fig, axs = plt.subplots(
             nrows=1,
             ncols=ncols,
@@ -279,8 +281,8 @@ def clusterplot_combined(
             pos_2, ax=axs[2], label=f"Signif. Clusters [P≤{alpha}]"
         )
         cbar.ax.set_yticks([0, 1])
-
-    fig.suptitle(title)
+    if title is not None:
+        fig.suptitle(title)
     if outpath:
         fig.savefig(outpath)
     if show:

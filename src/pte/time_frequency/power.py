@@ -1,4 +1,5 @@
 """Functions for calculating and handling band-power."""
+
 from pathlib import Path
 from typing import Literal
 
@@ -48,7 +49,7 @@ def plot_power(
 
 def smooth_power(
     power: mne.time_frequency.AverageTFR,
-    smoothing_type: str = "gaussian",
+    smoothing_type: Literal["gaussian", "median"] = "gaussian",
     **kwargs,
 ) -> mne.time_frequency.AverageTFR:
     """Smooth data in AverageTFR object using scipy smoothing filters."""
@@ -91,9 +92,9 @@ def smooth_2d_array(
 
 def apply_baseline(
     power: mne.time_frequency.AverageTFR,
-    baseline: tuple[int | float | None, int | float | None]
-    | np.ndarray
-    | None = (None, None),
+    baseline: (
+        tuple[int | float | None, int | float | None] | np.ndarray | None
+    ) = (None, None),
     mode: str = "percent",
 ) -> mne.time_frequency.AverageTFR:
     """Apply baseline correction given interval or custom values."""
@@ -196,23 +197,25 @@ def _get_baseline_indices(
     if bmin is None:
         imin = 0
     else:
-        imin = np.where(times >= bmin)[0]
-        if len(imin) == 0:
+        baseline_indices = np.where(times >= bmin)[0]
+        if len(baseline_indices) == 0:
             raise ValueError(
-                f"bmin is too large {bmin}, it exceeds the largest"
-                " time value."
+                f"The baseline values are not within the limits of the time"
+                f" range. Baseline values: {baseline}. Time range: {times[0]}"
+                f" to {times[-1]}."
             )
-        imin = int(imin[0])
+        imin = int(baseline_indices[0])
     if bmax is None:
         imax = len(times)
     else:
-        imax = np.where(times <= bmax)[0]
-        if len(imax) == 0:
+        baseline_indices = np.where(times <= bmax)[0]
+        if len(baseline_indices) == 0:
             raise ValueError(
-                f"bmax is too small {bmax}, it is smaller than the"
-                " smallest time value."
+                f"The baseline values are not within the limits of the time"
+                f" range. Baseline values: {baseline}. Time range: {times[0]}"
+                f" to {times[-1]}."
             )
-        imax = int(imax[-1]) + 1
+        imax = int(baseline_indices[-1]) + 1
     if imin >= imax:
         raise ValueError(
             f"Bad rescaling slice ({imin}:{imax}) from time values"
@@ -243,12 +246,16 @@ def get_baseline(
 
 
 def average_power(
-    powers: list[mne.time_frequency.AverageTFR]
-    | mne.time_frequency.AverageTFR,
+    powers: (
+        list[mne.time_frequency.AverageTFR] | mne.time_frequency.AverageTFR
+    ),
     picks: str | list[str] | slice,
-    baseline: tuple[int | float | None, int | float | None]
-    | list[np.ndarray]
-    | None = (None, None),
+    baseline: (
+        tuple[int | float | None, int | float | None]
+        | list[np.ndarray]
+        | np.ndarray
+        | None
+    ) = (None, None),
     baseline_mode: str | None = "zscore",
     clip: int | float | None = None,
 ) -> mne.time_frequency.AverageTFR:
@@ -257,14 +264,13 @@ def average_power(
         powers = [powers]
     if isinstance(baseline, np.ndarray):
         baseline = [baseline]
-    if isinstance(baseline, list):
-        if not len(baseline) == len(powers):
-            raise ValueError(
-                "If numpy arrays are provided for"
-                "custom baseline correction, the same number of numpy arrays"
-                " and `power` (TFR) objects must be provided. Got:"
-                f" {len(baseline)} baseline arrays and {len(powers)} powers."
-            )
+    if isinstance(baseline, list) and not len(baseline) == len(powers):
+        raise ValueError(
+            "If numpy arrays are provided for"
+            "custom baseline correction, the same number of numpy arrays"
+            " and `power` (TFR) objects must be provided. Got:"
+            f" {len(baseline)} baseline arrays and {len(powers)} powers."
+        )
 
     power_all = None
     power_all_files = []
@@ -321,7 +327,7 @@ def average_power(
 
 
 def load_power(
-    files: list[Path | str], verbose: bool = False
+    files: list[Path | str], verbose: bool | str | int | None = False
 ) -> list[mne.time_frequency.AverageTFR] | list[mne.time_frequency.EpochsTFR]:
     """Load power from *-tfr.h5 files."""
     powers = []
@@ -363,7 +369,7 @@ def morlet_from_epochs(
                 )
             decim = int(epochs.info["sfreq"] / 100)
         else:
-            decim = decim_power
+            decim = int(decim_power)
         kwargs["decim"] = decim
 
     power = mne.time_frequency.tfr_morlet(
@@ -382,13 +388,13 @@ def morlet_from_epochs(
 
 def epochs_from_raw(
     raw: mne.io.BaseRaw,
+    events_trial_onset: str | list[str] | list[tuple[str, str]],
+    events_trial_end: str | list[str] | list[tuple[str, str]] | None = None,
     tmin: int | float = -6,
     tmax: int | float = 6,
     baseline: tuple | None = None,
-    events_trial_onset: str | list[str | tuple[str, str]] | None = None,
-    events_trial_end: str | list[str | tuple[str, str]] | None = None,
     min_distance_trials: int | float = 0,
-    verbose: bool = True,
+    verbose: bool | str | int | None = True,
     **kwargs,
 ) -> mne.Epochs:
     """Return epochs from given events."""
@@ -417,7 +423,7 @@ def epochs_from_raw(
 
 def get_events(
     raw: mne.io.BaseRaw,
-    event_picks: str | list[str | tuple[str, str]],
+    event_picks: str | list[str] | list[tuple[str, str]],
 ) -> tuple[np.ndarray, dict]:
     """Get events from given Raw instance and event id."""
     if isinstance(event_picks, str):
@@ -473,15 +479,15 @@ def discard_epochs(
 def power_from_bids(
     bids_path: mne_bids.BIDSPath,
     nm_channels_dir: Path,
-    events_trial_onset: list[str] | None = None,
-    events_trial_end: list[str] | None = None,
+    events_trial_onset: str | list[str] | list[tuple[str, str]],
+    events_trial_end: str | list[str] | list[tuple[str, str]] | None = None,
     min_distance_trials: int | float = 0,
     bad_epochs_dir: Path | str | None = None,
     out_dir: Path | str | None = None,
     kwargs_preprocess: dict | None = None,
     kwargs_epochs: dict | None = None,
     kwargs_power: dict | None = None,
-    verbose: bool | str = False,
+    verbose: bool | str | int | None = False,
 ) -> mne.time_frequency.AverageTFR | mne.time_frequency.EpochsTFR | None:
     """Calculate power from single file."""
     print(f"File: {bids_path.basename}")

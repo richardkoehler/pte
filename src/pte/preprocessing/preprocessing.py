@@ -1,5 +1,6 @@
 """Module for preprocessing functions (resampling, referencing, etc.)"""
-from typing import Sequence
+
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Literal
 
@@ -43,7 +44,7 @@ def stim_filter(
     raw: mne.io.BaseRaw,
     stim_freq: str | int | float | np.ndarray | None = "auto",
     fname: str | None = None,
-    verbose: bool = False,
+    verbose: bool | str | int | None = False,
 ) -> mne.io.BaseRaw:
     """Bandstop filter Raw data"""
     if stim_freq is None:
@@ -66,10 +67,8 @@ def stim_filter(
             return raw
         stim_freq = 130
 
-    if isinstance(stim_freq, (int, float)):
-        stim_freq = np.arange(
-            stim_freq, raw.info["sfreq"] // 2 -1, stim_freq
-        )
+    if isinstance(stim_freq, int | float):
+        stim_freq = np.arange(stim_freq, raw.info["sfreq"] // 2 - 1, stim_freq)
 
     notch_widths = (stim_freq * 0.2).clip(max=26)
     raw = raw.notch_filter(
@@ -125,8 +124,7 @@ def ref_by_nm_channels(
     drop = list(set(anodes + cathodes) & set(raw.ch_names))
     keep = nm_channels.query("used == 1 and name not in @anodes")
     if not keep.empty:
-        keep = keep["name"].tolist()
-        drop = [ch for ch in drop if ch not in keep]
+        drop = [ch for ch in drop if ch not in keep["name"].tolist()]
     if drop:
         raw.drop_channels(drop)
 
@@ -150,12 +148,11 @@ def preprocess(
     stim_freq: str | int | float | np.ndarray | None = "auto",
     pick_used_channels: bool = False,
     sort_channels: bool = True,
-    verbose:bool = True
+    verbose: bool | str | int | None = True,
 ) -> mne.io.BaseRaw:
     """Preprocess raw data."""
-    if pick_used_channels or ref_nm_channels:
-        if nm_channels_dir is None:
-            raise ValueError("`nm_channels_dir` must be provided.")
+    if pick_used_channels or ref_nm_channels and nm_channels_dir is None:
+        raise ValueError("`nm_channels_dir` must be provided.")
     if nm_channels_dir:
         if filename is None:
             if not raw.filenames:
@@ -183,7 +180,7 @@ def preprocess(
                 {
                     ch: f"{ch}-avgref"
                     for ch, ch_type in zip(
-                        raw.ch_names, raw.get_channel_types()
+                        raw.ch_names, raw.get_channel_types(), strict=True
                     )
                     if ch_type == pick_type
                 }
@@ -200,7 +197,7 @@ def preprocess(
         curr_names = raw.ch_names
         rename_map = {
             old: new
-            for old, new in zip(old_names, new_names)
+            for old, new in zip(old_names, new_names, strict=True)
             if old in curr_names
         }
         raw.rename_channels(rename_map)
@@ -215,7 +212,7 @@ def preprocess(
         raw.filter(l_freq=high_pass, h_freq=low_pass, verbose=verbose)
 
     if notch_filter is not None:
-        notch_freqs = np.arange(
+        notch_freqs: np.ndarray = np.arange(
             notch_filter, raw.info["sfreq"] / 2, notch_filter
         )
         if notch_freqs.size > 0:

@@ -11,7 +11,7 @@ def get_emg_rms(
     raw: mne.io.BaseRaw,
     emg_ch: str | list[str] | np.ndarray,
     window_duration: float | int | Sequence,
-    analog_ch: list[str] | str | None = None,
+    analog_channel: str | Sequence[str] | None = None,
     rereference: bool = False,
     notch_filter: float | int = 50,
 ) -> mne.io.BaseRaw:
@@ -37,7 +37,7 @@ def get_emg_rms(
         Raw object containing root mean square of windowed signal and target
         channel.
     """
-    raw_emg = raw.copy()
+    raw_emg: mne.io.BaseRaw = raw.copy()
     raw_emg.pick(picks=emg_ch)
 
     if not raw_emg.preload:
@@ -48,7 +48,7 @@ def get_emg_rms(
         mapping={name: "eeg" for name in raw_emg.ch_names}
     )
     if rereference:
-        raw_emg: mne.io.BaseRaw = mne.set_bipolar_reference(
+        raw_emg = mne.set_bipolar_reference(
             inst=raw_emg,
             anode=raw_emg.ch_names[0],
             cathode=raw_emg.ch_names[1],
@@ -63,13 +63,13 @@ def get_emg_rms(
 
     data_bip = raw_emg.get_data(verbose=False)[0]
     if notch_filter:
-        assert isinstance(notch_filter, (int, float))
+        assert isinstance(notch_filter, int | float)
         freqs = np.arange(notch_filter, raw.info["sfreq"] / 2, notch_filter)
         raw_emg = raw_emg.notch_filter(freqs=freqs, picks="emg", verbose=False)
     raw_filtered = raw_emg.filter(
         l_freq=15, h_freq=500, picks="all", verbose=False
     )
-    if isinstance(window_duration, (int, float)):
+    if isinstance(window_duration, int | float):
         window_duration = [window_duration]
 
     data = raw_filtered.get_data()[0]
@@ -83,14 +83,16 @@ def get_emg_rms(
 
     emg_ch_names = [f"EMG_RMS_{window}" for window in window_duration]
 
-    if analog_ch:
-        if isinstance(analog_ch, str):
-            analog_ch = [analog_ch]
-        data_analog = raw.copy().pick(picks=analog_ch).get_data()[0]
+    if analog_channel:
+        if isinstance(analog_channel, str):
+            analog_channel = [analog_channel]
+        elif not isinstance(analog_channel, list):
+            analog_channel = list(analog_channel)
+        data_analog = raw.copy().pick(picks=analog_channel).get_data()[0]
         if np.abs(min(data_analog)) > max(data_analog):
             data_analog = data_analog * -1
         data_all = np.vstack((data_analog, data_bip, data_rms))
-        ch_names = analog_ch + ["EMG_BIP"] + emg_ch_names
+        ch_names = analog_channel + ["EMG_BIP"] + emg_ch_names
     else:
         data_all = np.vstack((data_bip, data_rms))
         ch_names = ["EMG_BIP"] + emg_ch_names

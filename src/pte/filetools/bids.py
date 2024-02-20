@@ -276,7 +276,7 @@ def _rewrite_events(
 
 def _get_description(channel_type: str) -> str:
     """Get channel type description."""
-    description = defaultdict(lambda: "Other type of channel")
+    description: defaultdict = defaultdict(lambda: "Other type of channel")
     description.update(
         meggradaxial="Axial Gradiometer",
         megrefgradaxial="Axial Gradiometer Reference",
@@ -301,9 +301,9 @@ def _get_description(channel_type: str) -> str:
 
 def _get_group(channel_name: str) -> str:
     """Get group for corresponding channel name."""
-    sides = defaultdict(lambda: "")
+    sides: defaultdict = defaultdict(lambda: "")
     sides.update(L="left", R="right")
-    groups = defaultdict(lambda: "n/a")
+    groups: defaultdict = defaultdict(lambda: "n/a")
     groups.update(
         MEG="MEG",
         ACC="accelerometer",
@@ -346,7 +346,9 @@ def _rewrite_channels(
         if channels_to_add:
             add_list = []
             ch_types = raw.get_channel_types(picks=channels_to_add)
-            for ch_name, ch_type in zip(channels_to_add, ch_types):
+            for ch_name, ch_type in zip(
+                channels_to_add, ch_types, strict=True
+            ):
                 add_dict = {
                     data_old.columns[i]: data_old.iloc[0][i]
                     for i in range(len(data_old.columns))
@@ -383,7 +385,9 @@ def _rewrite_electrodes(file: str | Path, raw: mne.io.BaseRaw) -> None:
     electrodes_old = data_old.index.tolist()
 
     electrodes_to_add = []
-    for ch_name, ch_type in zip(raw.ch_names, raw.get_channel_types()):
+    for ch_name, ch_type in zip(
+        raw.ch_names, raw.get_channel_types(), strict=True
+    ):
         if (ch_name not in electrodes_old) and (
             ch_type in ("ecog", "dbs", "seeg", "eeg")
         ):
