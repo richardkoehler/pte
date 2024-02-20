@@ -1,4 +1,5 @@
 """Module for annotating Raw objects and other data."""
+
 import mne
 
 

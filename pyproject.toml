@@ -86,6 +86,7 @@ module = [
   "mpl_toolkits.axes_grid1",
   "numba",
   "numpy",
+  "pandas",
   "plotly",
   "pte_stats",
   "pybv",

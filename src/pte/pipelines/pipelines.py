@@ -1,4 +1,5 @@
 """Module for predefined processing pipelines."""
+
 from collections.abc import Sequence
 from pathlib import Path
 
