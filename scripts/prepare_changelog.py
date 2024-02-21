@@ -28,7 +28,7 @@ def main():
     lines.insert(
         insert_index + 1,
         f"## [v{__version__}]"
-        "(https://github.com/richardkoehler/pte-stats/releases"
+        "(https://github.com/richardkoehler/pte/releases"
         f"/tag/v{__version__}) - "
         f"{datetime.now().strftime('%Y-%m-%d')}\n",
     )
