@@ -1,4 +1,5 @@
 """Module for predefined processing pipelines."""
+
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -17,7 +18,7 @@ def process_emg_rms(
     out_path: mne_bids.BIDSPath | None = None,
 ) -> mne.io.BaseRaw:
     """Add EMG root mean square channels to Raw object and save."""
-    if raw.filenames:
+    if raw.filenames and raw.filenames[0] is not None:
         prefix = f"File: {Path(raw.filenames[0]).name}. "
     else:
         prefix = ""

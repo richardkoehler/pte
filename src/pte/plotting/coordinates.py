@@ -1,6 +1,6 @@
 """Module for handling brain coordinates."""
+
 import pathlib
-from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,7 @@ RESOURCES = pathlib.Path(__file__).parent / "resources"
 #  (https://github.com/aaolaveh/anat-from-MNI/blob/master/functions.py)
 def find_structure_mni(
     mni_coords: np.ndarray, database: pathlib.Path | str | None = None
-) -> list[str] | str:
+) -> list[list[str]]:
     """
     Convert MNI coordinate to a description of brain structure in aal
 
@@ -57,19 +57,15 @@ def find_structure_mni(
     rows = np.shape(atlas["DB"])[1]
     descriptions = []
     for ind in ind_coords:
-        single_result = []
+        single_result: list[str] = []
         for j in range(rows):
             # atlas["DB"][0,j][0,0][0] is the j-th 3D-matrix
             graylevel = atlas["DB"][0, j][0, 0][0][ind[0], ind[1], ind[2]]
             if graylevel == 0:
                 label = "undefined"
             else:
-                if j < (rows - 1):
-                    suffix = ""
-                else:
-                    suffix = " (aal)"
-
-                # mat['DB'][0,j][0,0][1]  is the list with regions
+                suffix = "" if j < rows - 1 else " (aal)"
+                # atlas['DB'][0,j][0,0][1]  is the list with regions
                 label = (
                     atlas["DB"][0, j][0, 0][1][0, (graylevel - 1)][0] + suffix
                 )
@@ -145,10 +141,7 @@ def add_coords(data: pd.DataFrame, coords: pd.DataFrame) -> pd.DataFrame:
     """Add x, y and z electrode coordinates to DataFrame."""
     data.loc[:, ["x", "y", "z"]] = None
     for ind in data.index:
-        if "avgref" in ind[1]:
-            ind_elec = (ind[0], ind[1][:-7])
-        else:
-            ind_elec = ind
+        ind_elec = (ind[0], ind[1][:-7]) if "avgref" in ind[1] else ind
         try:
             data.loc[ind, ["x", "y", "z"]] = coords.loc[
                 ind_elec, ["x", "y", "z"]

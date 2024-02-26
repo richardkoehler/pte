@@ -1,14 +1,13 @@
 """Module for plotting quantitave results onto brain structures."""
+
 import copy
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
 import scipy.io
-from matplotlib import cm, collections, figure
+from matplotlib import cm, collections, figure, ticker
 from matplotlib import pyplot as plt
-from matplotlib import ticker
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 RESOURCES = Path(__file__).parent / "resources"
@@ -31,7 +30,7 @@ def meshplot_2d_compare(
     invert_colors_left: bool = False,
     invert_colors_right: bool = False,
     show: bool = True,
-    verbose: bool = True,
+    verbose: bool | str | int | None = True,
 ) -> figure.Figure:
     """Plot data on both hemispheres in a 2D view."""
     vertices = scipy.io.loadmat(str(RESOURCES / "vertices.mat"))
@@ -61,11 +60,9 @@ def meshplot_2d_compare(
 
     ecog_list, stn_list, cbar_list = [], [], []
 
-    for i, (data, side, lims, invert_colors) in enumerate(
-        (
-            (data_left, "left", lims_left, invert_colors_left),
-            (data_right, "right", lims_right, invert_colors_right),
-        )
+    for data, side, lims, invert_colors in (
+        (data_left, "left", lims_left, invert_colors_left),
+        (data_right, "right", lims_right, invert_colors_right),
     ):
         plot_cort, plot_stn = _plot_single_hem(
             data=data,
@@ -81,14 +78,14 @@ def meshplot_2d_compare(
         stn_list.append(plot_stn)
         cbar_list.append(side)
 
-    for i, ax in enumerate(axes):
+    for ax in axes:
         ax.axes.xaxis.set_ticks([])
         ax.axes.yaxis.set_ticks([])
         ax.axis("off")
 
     label_cbars = [label_left, label_right]
     for idx, (plot_cort, plot_stn, location) in enumerate(
-        zip(ecog_list, stn_list, cbar_list)
+        zip(ecog_list, stn_list, cbar_list, strict=True)
     ):
         for i, (pos, ratio) in enumerate(
             ((plot_cort, ratio_cortex_subcortex), (plot_stn, 1))
@@ -111,12 +108,11 @@ def meshplot_2d_compare(
             ticks_loc = cbar.ax.get_yticks().tolist()
             cbar.ax.yaxis.set_major_locator(ticker.FixedLocator(ticks_loc))
             cbar.ax.set_yticklabels(
-                labels=np.round(cbar.get_ticks(), 2),
-                color=color
+                labels=np.round(cbar.get_ticks(), 2), color=color
             )
-            cbar.outline.set_edgecolor(color)
-
-    fig.suptitle(title)
+            cbar.outline.set_edgecolor(color)  # type: ignore[operator]
+    if title is not None:
+        fig.suptitle(title)
     if outpath is not None:
         fig.savefig(outpath, bbox_inches="tight")
     if show:
@@ -124,9 +120,7 @@ def meshplot_2d_compare(
     return fig
 
 
-def _get_lims(
-    data: np.ndarray, num_devs: int | float
-) -> tuple[float, float]:
+def _get_lims(data: np.ndarray, num_devs: int | float) -> tuple[float, float]:
     """Get lower and upper limit in standard deviations."""
     mean = np.nanmean(data)
     std = np.nanstd(data)
@@ -143,7 +137,7 @@ def _plot_single_hem(
     dot_size: int,
     key: str,
     reverse_cmap: bool,
-    verbose: bool,
+    verbose: bool | str | int | None,
 ) -> tuple[collections.PathCollection, collections.PathCollection]:
     """Plot data for a single hemisphere."""
     data = data.dropna(axis=0, subset=["x", "y", "z"])

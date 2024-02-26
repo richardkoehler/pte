@@ -1,4 +1,5 @@
 """Test import of pte"""
+
 import pte
 
 

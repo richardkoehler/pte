@@ -1,5 +1,11 @@
+# Archive
+.archive/
+
+# Ruff linter
+.ruff_cache/
+
 # Byte-compiled / optimized / DLL files
-__pycache__/
+*__pycache__
 *.py[cod]
 *$py.class
 
@@ -7,6 +13,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+.pypirc/
 .Python
 build/
 develop-eggs/

@@ -270,13 +270,13 @@ def _rewrite_events(
     in_path = in_path.copy()
     in_path.update(suffix="events", extension=".tsv")
     out_path = out_path.copy()
-    out_path.update(suffix="events", extension="tsv")
+    out_path.update(suffix="events", extension=".tsv")
     shutil.copyfile(in_path.fpath, out_path.fpath)
 
 
 def _get_description(channel_type: str) -> str:
     """Get channel type description."""
-    description = defaultdict(lambda: "Other type of channel")
+    description: defaultdict = defaultdict(lambda: "Other type of channel")
     description.update(
         meggradaxial="Axial Gradiometer",
         megrefgradaxial="Axial Gradiometer Reference",
@@ -301,9 +301,9 @@ def _get_description(channel_type: str) -> str:
 
 def _get_group(channel_name: str) -> str:
     """Get group for corresponding channel name."""
-    sides = defaultdict(lambda: "")
+    sides: defaultdict = defaultdict(lambda: "")
     sides.update(L="left", R="right")
-    groups = defaultdict(lambda: "n/a")
+    groups: defaultdict = defaultdict(lambda: "n/a")
     groups.update(
         MEG="MEG",
         ACC="accelerometer",
@@ -339,33 +339,33 @@ def _rewrite_channels(
 
     channels_to_add = [ch for ch in channels_new if ch not in channels_old]
 
-    if not any((channels_to_add, channels_to_remove)):
-        return
+    if any((channels_to_add, channels_to_remove)):
+        if channels_to_remove:
+            data_old = data_old.drop(channels_to_remove)
 
-    if channels_to_remove:
-        data_old = data_old.drop(channels_to_remove)
+        if channels_to_add:
+            add_list = []
+            ch_types = raw.get_channel_types(picks=channels_to_add)
+            for ch_name, ch_type in zip(
+                channels_to_add, ch_types, strict=True
+            ):
+                add_dict = {
+                    data_old.columns[i]: data_old.iloc[0][i]
+                    for i in range(len(data_old.columns))
+                }
+                add_dict.update(
+                    status="good",
+                    description=_get_description(ch_type),
+                    type=ch_type.upper(),
+                    group=_get_group(ch_name),
+                )
+                add_list.append(add_dict)
+            print(f"Added channels: {channels_to_add}")
+            print(f"Added channel types: {ch_types}")
 
-    if channels_to_add:
-        add_list = []
-        ch_types = raw.get_channel_types(picks=channels_to_add)
-        for ch_name, ch_type in zip(channels_to_add, ch_types):
-            add_dict = {
-                data_old.columns[i]: data_old.iloc[0][i]
-                for i in range(len(data_old.columns))
-            }
-            add_dict.update(
-                status="good",
-                description=_get_description(ch_type),
-                type=ch_type.upper(),
-                group=_get_group(ch_name),
-            )
-            add_list.append(add_dict)
-        print(f"Added channels: {channels_to_add}")
-        print(f"Added channel types: {ch_types}")
-
-        index = pd.Index(channels_to_add, name="name")
-        data_to_add = pd.DataFrame(add_list, index=index)
-        data_old = data_old.append(data_to_add, ignore_index=False)
+            index = pd.Index(channels_to_add, name="name")
+            data_to_add = pd.DataFrame(add_list, index=index)
+            data_old = pd.concat([data_old, data_to_add], ignore_index=False)
 
     data_old = data_old.reindex(index=channels_new)
     data_old.to_csv(
@@ -385,7 +385,9 @@ def _rewrite_electrodes(file: str | Path, raw: mne.io.BaseRaw) -> None:
     electrodes_old = data_old.index.tolist()
 
     electrodes_to_add = []
-    for ch_name, ch_type in zip(raw.ch_names, raw.get_channel_types()):
+    for ch_name, ch_type in zip(
+        raw.ch_names, raw.get_channel_types(), strict=True
+    ):
         if (ch_name not in electrodes_old) and (
             ch_type in ("ecog", "dbs", "seeg", "eeg")
         ):
@@ -395,7 +397,7 @@ def _rewrite_electrodes(file: str | Path, raw: mne.io.BaseRaw) -> None:
         data=None, index=electrodes_to_add, columns=data_old.columns
     )
 
-    data_old = data_old.append(data_to_add, ignore_index=False)
+    data_old = pd.concat([data_old, data_to_add], ignore_index=False)
     data_old.sort_index(axis=0, inplace=True)
 
     data_old.to_csv(
