@@ -54,7 +54,6 @@ dev = [
   "hatch",
   "mypy",
   "packaging",
-  "pandas-stubs",
   "pre-commit",
   "pytest",
   "pytest-cov",
