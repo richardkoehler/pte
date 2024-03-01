@@ -44,6 +44,7 @@ def add_emg_rms(
         window_duration=[window_duration],
         analog_channel=analog_channel,
         rereference=False,
+        scale=1e-6,
     )
 
     rms_channel = f"EMG_RMS_{window_duration}"
@@ -68,7 +69,11 @@ def add_emg_rms(
 
 
 def add_squared_channel(
-    raw: mne.io.BaseRaw, event_id: dict, ch_name: str, inplace: bool = False
+    raw: mne.io.BaseRaw,
+    event_id: dict,
+    ch_name: str,
+    inplace: bool = False,
+    scale: float = 1,
 ) -> mne.io.BaseRaw:
     """Create squared data (0s and 1s) from events and add to Raw object.
 
@@ -94,7 +99,7 @@ def add_squared_channel(
     events_ids = events[:, 0]
     data_squared = np.zeros((1, raw.n_times))
     for i in np.arange(0, len(events_ids), 2):
-        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0  # * 1e-6
+        data_squared[0, events_ids[i] : events_ids[i + 1]] = 1.0 * scale
 
     info = mne.create_info(
         ch_names=[ch_name], ch_types=["misc"], sfreq=raw.info["sfreq"]

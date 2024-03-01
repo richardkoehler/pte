@@ -14,6 +14,7 @@ def get_emg_rms(
     analog_channel: str | Sequence[str] | None = None,
     rereference: bool = False,
     notch_filter: float | int = 50,
+    scale: float = 1,
 ) -> mne.io.BaseRaw:
     """Return root mean square with given window length of raw object.
 
@@ -78,7 +79,7 @@ def get_emg_rms(
     for idx, window in enumerate(window_duration):
         rms_raw = _rms_window_nb(data, window, raw.info["sfreq"])
         # now scale to match other MISC channels
-        rms_zscore = (rms_raw - np.mean(rms_raw)) / np.std(rms_raw)
+        rms_zscore = (rms_raw - np.mean(rms_raw)) / np.std(rms_raw) * scale
         data_rms[idx, :] = rms_zscore
 
     emg_ch_names = [f"EMG_RMS_{window}" for window in window_duration]

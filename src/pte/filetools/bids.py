@@ -186,6 +186,7 @@ def rewrite_bids_file(
         temp_dir = Path(backup_dir, "temp")
         temp_dir.mkdir(exist_ok=False)
         temp_path = current_path.copy().update(root=temp_dir)
+        temp_path.mkdir()
         raw = raw.copy()
         raw.set_montage(None)
 
@@ -197,6 +198,7 @@ def rewrite_bids_file(
             bids_path=temp_path,
             allow_preload=True,
             format="BrainVision",
+            overwrite=False,
             verbose=False,
         )
 
@@ -269,6 +271,8 @@ def _rewrite_events(
     """
     in_path = in_path.copy()
     in_path.update(suffix="events", extension=".tsv")
+    if not in_path.fpath.exists():
+        return
     out_path = out_path.copy()
     out_path.update(suffix="events", extension=".tsv")
     shutil.copyfile(in_path.fpath, out_path.fpath)
