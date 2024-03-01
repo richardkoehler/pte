@@ -177,16 +177,15 @@ def rewrite_bids_file(
     current_dir = current_path.directory
 
     # Create backup directory
-    backup_dir = Path(current_dir, "backup")
+    backup_dir = Path(current_path.root, "backup")
     # Backup files
     _backup_files(current_path, backup_dir)
 
     try:
         # Create temporary working directory
-        temp_dir = Path(backup_dir, "temp")
+        temp_dir = Path(current_path.root, "tmp")
         temp_dir.mkdir(exist_ok=False)
         temp_path = current_path.copy().update(root=temp_dir)
-        temp_path.mkdir()
         raw = raw.copy()
         raw.set_montage(None)
 
