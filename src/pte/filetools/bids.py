@@ -177,14 +177,14 @@ def rewrite_bids_file(
     current_dir = current_path.directory
 
     # Create backup directory
-    backup_dir = Path(current_path.root, "backup")
+    backup_dir: Path = current_path.root / "backup"
     # Backup files
     _backup_files(current_path, backup_dir)
 
     try:
         # Create temporary working directory
-        temp_dir = Path(current_path.root, "tmp")
-        temp_dir.mkdir(exist_ok=False)
+        temp_dir = backup_dir / "tmp"
+        temp_dir.mkdir(exist_ok=True)
         temp_path = current_path.copy().update(root=temp_dir)
         raw = raw.copy()
         raw.set_montage(None)
@@ -197,7 +197,7 @@ def rewrite_bids_file(
             bids_path=temp_path,
             allow_preload=True,
             format="BrainVision",
-            overwrite=False,
+            overwrite=True,
             verbose=False,
         )
 
