@@ -151,7 +151,7 @@ def preprocess(
     verbose: bool | str | int | None = True,
 ) -> mne.io.BaseRaw:
     """Preprocess raw data."""
-    if pick_used_channels or ref_nm_channels and nm_channels_dir is None:
+    if (pick_used_channels or ref_nm_channels) and nm_channels_dir is None:
         raise ValueError("`nm_channels_dir` must be provided.")
     if nm_channels_dir:
         if filename is None:
