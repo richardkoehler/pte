@@ -180,10 +180,11 @@ def clusterplot_combined(
 
     if not fig:
         ncols = 3 if plot_pvals else 1
+        figsize = (8, 2.4) if ncols == 3 else (4.2, 2.4)
         fig, axs = plt.subplots(
             nrows=1,
             ncols=ncols,
-            figsize=(8, 2.4),
+            figsize=figsize,
             sharex=True,
             sharey=True,
         )
