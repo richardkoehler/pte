@@ -115,18 +115,12 @@ def ref_by_nm_channels(
         cathode=cathodes,
         ch_name=new_names,
         drop_refs=False,
+        on_bad="warn",
     )
 
     if rename:
         raw.drop_channels(rename.values())
         raw.rename_channels(rename)
-
-    drop = list(set(anodes + cathodes) & set(raw.ch_names))
-    keep = nm_channels.query("used == 1 and name not in @anodes")
-    if not keep.empty:
-        drop = [ch for ch in drop if ch not in keep["name"].tolist()]
-    if drop:
-        raw.drop_channels(drop)
 
     bads = raw.info["bads"]
     for ch in new_names:
