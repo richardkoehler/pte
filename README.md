@@ -89,7 +89,7 @@ PTE is licensed under the [MIT license](license-url).
 
 [python-shield]:
   https://img.shields.io/static/v1?label=Python&message=3.10&logoColor=black&labelColor=grey&color=blue
-[python-url]: https://pypi.org/project/pte-stats/
+[python-url]: https://pypi.org/project/pte/
 [contributors-shield]:
   https://img.shields.io/github/contributors/richardkoehler/pte.svg?
 [contributors-url]: https://github.com/richardkoehler/pte/graphs/contributors

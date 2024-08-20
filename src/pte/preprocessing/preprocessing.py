@@ -139,7 +139,7 @@ def preprocess(
     resample_freq: int | float | None = 500,
     high_pass: int | float | None = None,
     low_pass: int | float | None = None,
-    stim_freq: str | int | float | np.ndarray | None = "auto",
+    stim_freq: str | int | float | np.ndarray | None = None,
     pick_used_channels: bool = False,
     sort_channels: bool = True,
     verbose: bool | str | int | None = True,
@@ -192,7 +192,7 @@ def preprocess(
         rename_map = {
             old: new
             for old, new in zip(old_names, new_names, strict=True)
-            if old in curr_names
+            if old in curr_names and new not in curr_names
         }
         raw.rename_channels(rename_map)
 

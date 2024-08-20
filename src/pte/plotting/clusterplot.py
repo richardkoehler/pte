@@ -157,7 +157,7 @@ def clusterplot_combined(
     x_label: str = "Time [s]",
     y_label: str = "Frequency [Hz]",
     cbar_label: str = "Power [AU]",
-    cbar_borderval: str | int | float = "auto",
+    cbar_borderval: str | int | float | tuple[float | float] = "auto",
     plot_pvals: bool = True,
     outpath: Path | str | None = None,
     show: bool = True,
@@ -205,8 +205,8 @@ def clusterplot_combined(
         cmap="viridis",
         aspect="auto",
         origin="lower",
-        vmin=cbar_borderval * -1,
-        vmax=cbar_borderval,
+        vmin=cbar_borderval[0],
+        vmax=cbar_borderval[1],
     )
     fig.colorbar(pos_0, ax=axs[0], label=cbar_label)
 
