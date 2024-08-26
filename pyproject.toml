@@ -45,7 +45,6 @@ dependencies = [
   "scikit-image",
   "scipy",
   "mne-qt-browser",
-  "pyqt5",
 ]
 
 [project.optional-dependencies]
