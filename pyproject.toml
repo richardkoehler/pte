@@ -45,6 +45,7 @@ dependencies = [
   "scikit-image",
   "scipy",
   "mne-qt-browser",
+  "pyside6",
 ]
 
 [project.optional-dependencies]
