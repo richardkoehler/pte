@@ -3,9 +3,7 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-authors = [
-  {name = "Richard M. Köhler"},
-]
+authors = [{ name = "Richard M. Köhler" }]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Intended Audience :: Science/Research",
@@ -23,12 +21,10 @@ classifiers = [
 description = "An open-source software package for working with electrophysiological data"
 dynamic = ["version"]
 keywords = ["eeg", "ieeg", "dbs", "ecog", "lfp", "neurophysiology"]
-license = {file = "LICENSE"}
-maintainers = [
-  {name = "Richard M. Köhler"},
-]
+license = { file = "LICENSE" }
+maintainers = [{ name = "Richard M. Köhler" }]
 name = "pte"
-readme = {file = "README.md", content-type = "text/markdown"}
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.10"
 
 dependencies = [
@@ -104,19 +100,19 @@ line-length = 79
 
 [tool.ruff.lint]
 select = [
-    # pycodestyle
-    "E",
-    # Pyflakes
-    "F",
-    # pyupgrade
-    "UP",
-    # flake8-bugbear
-    "B",
-    # flake8-simplify
-    "SIM",
-    # isort
-    "I",
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # flake8-simplify
+  "SIM",
+  # isort
+  "I",
 ]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]

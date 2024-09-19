@@ -22,8 +22,9 @@ def clusterplot_correlation(
     x_label: str = "Time [s]",
     y_label: str = "Frequency [Hz]",
     cbar_label: str = "Power [AU]",
-    cbar_borderval: Literal["auto"] | int | float = "auto",
-    cbar_borderval_corr: Literal["auto"] | int | float = "auto",
+    cbar_borderval: Literal["auto"] | float | tuple[float, float] = "auto",
+    corr_method: Literal["spearman", "pearson"] = "spearman",
+    cbar_borderval_corr: Literal["auto"] | float = "auto",
     outpath: Path | str | None = None,
     show: bool = True,
     n_jobs: int = 1,
@@ -38,6 +39,8 @@ def clusterplot_correlation(
                 f" 'auto'. Got: {cbar_borderval}."
             )
         cbar_borderval = min(data_av.max(), np.abs(data_av.min()))
+    if isinstance(cbar_borderval, int | float):
+        cbar_borderval = (-cbar_borderval, cbar_borderval)
 
     if not fig:
         fig, axs = plt.subplots(
@@ -53,14 +56,27 @@ def clusterplot_correlation(
         ax.set_xlabel(x_label)
     axs[0].set_ylabel(y_label)
 
+    if corr_method == "spearman":
+        corr_label = "Spearman's ρ"
+        corr_func = scipy.stats.spearmanr
+    elif corr_method == "pearson":
+        corr_label = "Pearson's r"
+        corr_func = scipy.stats.pearsonr
+    else:
+        raise ValueError(
+            f"Unknown correlation method. Got: {corr_method}."
+            "Must be one of 'spearman' or 'pearson'."
+        )
+
     corr_vals = np.empty(data.shape[1:])
     p_values = np.empty(data.shape[1:])
     for i in range(data.shape[1]):
         for j in range(data.shape[2]):
-            corr, pval = scipy.stats.spearmanr(data[:, i, j], corr_data)
+            corr, pval = corr_func(data[:, i, j], corr_data)
             corr_vals[i, j] = corr
             p_values[i, j] = pval
-
+    zeroes = np.where(p_values == 0)
+    p_values[zeroes] = 1 / np.math.factorial(data.shape[0])
     _, cluster_arr = pte_stats.cluster_correct_pvals_2d(
         p_values=p_values,
         alpha=alpha,
@@ -94,8 +110,8 @@ def clusterplot_correlation(
         cmap="viridis",
         aspect="auto",
         origin="lower",
-        vmin=cbar_borderval * -1,
-        vmax=cbar_borderval,
+        vmin=cbar_borderval[0],
+        vmax=cbar_borderval[1],
     )
     fig.colorbar(pos_0, ax=axs[0], label=cbar_label)
 
@@ -105,10 +121,10 @@ def clusterplot_correlation(
                 "`cbar_borderval_corr` must be either an int, float or"
                 f" 'auto'. Got: {cbar_borderval_corr}."
             )
-        cbar_borderval_corr = min(corr_vals.max(), np.abs(corr_vals.min()))
-    corr_vals_masked = np.ma.masked_where(np.logical_not(squared), corr_vals)
+        cbar_borderval_corr = max(corr_vals.max(), np.abs(corr_vals.min()))
+    # corr_vals_masked = np.ma.masked_where(np.logical_not(squared), corr_vals)
     pos_1 = axs[1].imshow(
-        corr_vals_masked,
+        corr_vals,  # _masked,
         extent=extent,
         cmap="viridis",
         aspect="auto",
@@ -116,7 +132,7 @@ def clusterplot_correlation(
         vmax=cbar_borderval_corr,
         vmin=-cbar_borderval_corr,  # type: ignore[operator]
     )
-    fig.colorbar(pos_1, ax=axs[1], label="Spearman's ρ")
+    fig.colorbar(pos_1, ax=axs[1], label=corr_label)
 
     pos_2 = axs[2].imshow(
         p_values,
@@ -127,13 +143,15 @@ def clusterplot_correlation(
         origin="lower",
     )
     axs[2].contour(
-        p_values,
-        levels=[alpha],
+        squared,
+        levels=[0.99],
+        # p_values,
+        # levels=[alpha],
         extent=extent,
         origin="lower",
         colors="black",
     )
-    fig.colorbar(pos_2, ax=axs[2], label="P [log]")
+    fig.colorbar(pos_2, ax=axs[2], label=f"P [alpha = {alpha}]")
 
     if title:
         fig.suptitle(title)
@@ -177,6 +195,8 @@ def clusterplot_combined(
                 f" 'auto'. Got: {cbar_borderval}."
             )
         cbar_borderval = min(power_av.max(), np.abs(power_av.min()))
+    if isinstance(cbar_borderval, int | float):
+        cbar_borderval = (-cbar_borderval, cbar_borderval)
 
     if not fig:
         ncols = 3 if plot_pvals else 1

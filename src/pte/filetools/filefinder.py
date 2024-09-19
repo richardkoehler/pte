@@ -98,14 +98,15 @@ class FileFinder(ABC):
             extensions (list): e.g. [".json" or "tsv"] (optional)
             verbose (bool): verbosity level (optional, default=True)
         """
-
-        files = []
-        for root, _, fnames in os.walk(directory):
-            fnames = [os.path.join(root, file) for file in fnames]
-            fnames = self._keyword_search(fnames, extensions)
-            if fnames:
-                files.extend(fnames)
-        self.files = files
+        dir_path = Path(directory)
+        if not extensions:
+            extensions = [""]
+        elif isinstance(extensions, str):
+            extensions = [extensions]
+        files: list[str] = []
+        for ext in extensions:
+            files.extend(str(file) for file in dir_path.glob(f"**/*{ext}"))
+        self.files = sorted(files)
 
     def _filter_files(
         self,
