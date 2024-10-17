@@ -153,7 +153,7 @@ def apply_baseline_array(
             " must be the same as `power`. Shape of `baseline`:"
             f" {baseline.shape}. Shape of `power`: {data.shape}."
         )
-    mean = np.mean(data, axis=-1, keepdims=True)
+    mean = np.mean(baseline, axis=-1, keepdims=True)
 
     if mode == "mean":
         data -= mean
@@ -171,12 +171,12 @@ def apply_baseline_array(
 
     elif mode == "zscore":
         data -= mean
-        data /= np.std(data, axis=-1, keepdims=True)
+        data /= np.std(baseline, axis=-1, keepdims=True)
 
     elif mode == "zlogratio":
         data /= mean
         np.log10(data, out=data)
-        data /= np.std(data, axis=-1, keepdims=True)
+        data /= np.std(baseline, axis=-1, keepdims=True)
 
     else:
         raise ValueError(f"Unknown baseline correction mode: {mode}.")
@@ -349,6 +349,7 @@ def morlet_from_epochs(
     n_jobs: int = -1,
     picks: str = "all",
     decim_power: str | int | float = "auto",
+    verbose: str | bool = "ERROR",
     **kwargs,
 ) -> mne.time_frequency.AverageTFR | mne.time_frequency.EpochsTFR:
     """Calculate power with MNE's Morlet transform and sensible defaults."""
@@ -372,15 +373,14 @@ def morlet_from_epochs(
             decim = int(decim_power)
         kwargs["decim"] = decim
 
-    power = mne.time_frequency.tfr_morlet(
-        inst=epochs,
+    power = epochs.compute_tfr(
+        method="morlet",
         freqs=freqs,
-        n_cycles=n_cycles,
-        n_jobs=n_jobs,
         picks=picks,
         average=average,
-        return_itc=False,
-        verbose=True,
+        verbose=verbose,
+        n_jobs=n_jobs,
+        n_cycles=n_cycles,
         **kwargs,
     )
     return power
